@@ -69,13 +69,48 @@ pip install -r requirements.txt
 ```
 
 3. Configure API settings:
-- Create a `.env` file with your API credentials
-- Or update config/api_config.py directly
+   - Create a `.env` file with your API credentials (for local development)
+   - Or use the Streamlit secrets approach (see below)
 
 4. Run the application:
 ```
 python main.py
 ```
+
+## 🔐 API Credentials Management
+
+### Local Development
+
+For local development, you can use either:
+
+1. **Environment Variables (.env file)**
+   - Create a `.env` file in the project root
+   - Add your API credentials:
+     ```
+     OPENAI_API_KEY=your_api_key_here
+     OPENAI_API_URL=https://free.v36.cm/v1/chat/completions
+     ```
+
+2. **Streamlit Secrets**
+   - Create a `.streamlit/secrets.toml` file
+   - Use the provided template from `.streamlit/secrets.toml.example`
+   - Add your actual credentials
+
+### Deploying to Streamlit Cloud
+
+When deploying to Streamlit Cloud, your credentials should be stored in Streamlit Secrets:
+
+1. Deploy your app to Streamlit Cloud
+2. Go to your app's settings
+3. In the "Secrets" section, add your credentials in TOML format:
+   ```toml
+   OPENAI_API_KEY = "your_api_key_here"
+   OPENAI_API_URL = "https://free.v36.cm/v1/chat/completions"
+   OPENAI_MODEL = "gpt-4o-mini"
+   ```
+4. Save changes
+
+This approach keeps your credentials secure and out of version control.
 
 ## 📊 Use Cases
 

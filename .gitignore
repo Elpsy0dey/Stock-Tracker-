@@ -1,24 +1,48 @@
-# Python bytecode files
+# Environment variables
+.env
+
+# Streamlit secrets
+.streamlit/secrets.toml
+
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
-
-# Distribution / packaging
-dist/
+*.so
+.Python
 build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
 *.egg-info/
+.installed.cfg
+*.egg
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
 
 # Virtual environments
 .venv/
 venv/
 ENV/
-
-# IDE specific files
-.idea/
-.vscode/
-.cursor/
-*.swp
-*.swo
 
 # Logs
 *.log
@@ -26,12 +50,6 @@ logs/
 
 # Local configuration
 .env
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# macOS files
-.DS_Store
 
 # Test cache
 .pytest_cache/
