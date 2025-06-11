@@ -1,0 +1,80 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Upload Trading Data</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="#">📈 Trading Tracker</a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="{{ url_for('index') }}">Dashboard</a>
+                <a class="nav-link" href="{{ url_for('trades_view') }}">Trades</a>
+                <a class="nav-link" href="{{ url_for('upload_file') }}">Upload</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="alert alert-info alert-dismissible fade show">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div class="row justify-content-center">
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header">
+                        <h4>Upload Trading Data</h4>
+                    </div>
+                    <div class="card-body">
+                        <form method="POST" enctype="multipart/form-data">
+                            <div class="mb-3">
+                                <label for="file" class="form-label">Select CSV File</label>
+                                <input type="file" class="form-control" id="file" name="file" accept=".csv" required>
+                                <div class="form-text">
+                                    Upload a CSV file with your trading data. The file should contain columns:
+                                    Trade Date, Settlement Date, Symbol, Side, Units, Avg. Price, Value, Fees, etc.
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Upload File</button>
+                        </form>
+                    </div>
+                </div>
+
+                <div class="card mt-4">
+                    <div class="card-header">
+                        <h5>Expected CSV Format</h5>
+                    </div>
+                    <div class="card-body">
+                        <p>Your CSV file should have the following columns:</p>
+                        <ul>
+                            <li><strong>Trade Date</strong> - Date of the trade</li>
+                            <li><strong>Settlement Date</strong> - Settlement date</li>
+                            <li><strong>Symbol</strong> - Stock symbol and name</li>
+                            <li><strong>Side</strong> - Buy or Sell</li>
+                            <li><strong>Units</strong> - Number of shares</li>
+                            <li><strong>Avg. Price</strong> - Average price per share</li>
+                            <li><strong>Value</strong> - Total trade value</li>
+                            <li><strong>Fees</strong> - Trading fees</li>
+                            <li><strong>Total Value</strong> - Net trade value</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
