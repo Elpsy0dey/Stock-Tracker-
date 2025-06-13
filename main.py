@@ -749,6 +749,229 @@ def analyze_symbol(symbol: str, period: str):
                 if latest.get('Engulfing', False):
                     st.warning("🟡 Engulfing")
             
+            # V4.0 Price-Volume Analysis Section
+            st.markdown("---")
+            st.subheader("⚠️ Price-Volume Analysis & Trap Risk")
+            
+            # Extract V4.0 indicators
+            v4_indicators = {
+                'Bull_Trap': latest.get('Bull_Trap', 0),
+                'Bear_Trap': latest.get('Bear_Trap', 0),
+                'False_Breakout': latest.get('False_Breakout', 0),
+                'Volume_Price_Divergence': latest.get('Volume_Price_Divergence', 0),
+                'HFT_Activity': latest.get('HFT_Activity', 0),
+                'Stop_Hunting': latest.get('Stop_Hunting', 0),
+                'Volume_Delta': latest.get('Volume_Delta', 0)
+            }
+            
+            # Create a result dictionary with the necessary fields for trap risk calculation
+            result_for_risk = {**v4_indicators, 'Close': latest['Close']}
+            if 'SMA_20' in latest:
+                result_for_risk['SMA_20'] = latest['SMA_20']
+            
+            # Calculate trap risk
+            trap_risk = get_trap_risk_indicator(result_for_risk)
+            
+            # Display trap risk prominently
+            col1, col2 = st.columns([1, 3])
+            with col1:
+                st.markdown("### Trap Risk:")
+                risk_color = "green" if "Low" in trap_risk else "orange" if "Medium" in trap_risk else "red" if "High" in trap_risk else "gray"
+                st.markdown(f"<h2 style='color: {risk_color};'>{trap_risk}</h2>", unsafe_allow_html=True)
+            
+            with col2:
+                st.markdown("### Risk Factors:")
+                
+                # Display active risk factors
+                risk_factors = []
+                
+                if v4_indicators['Bull_Trap'] > 0:
+                    risk_factors.append("🔴 Bull Trap Detected")
+                if v4_indicators['Bear_Trap'] > 0:
+                    risk_factors.append("🔴 Bear Trap Detected")
+                if v4_indicators['False_Breakout'] != 0:
+                    risk_factors.append("🔴 False Breakout Pattern")
+                if v4_indicators['Volume_Price_Divergence'] != 0:
+                    divergence_type = "Bearish" if v4_indicators['Volume_Price_Divergence'] < 0 else "Bullish"
+                    risk_factors.append(f"🟡 {divergence_type} Volume-Price Divergence")
+                if v4_indicators['HFT_Activity'] > 0.7:
+                    risk_factors.append("🔴 High HFT Activity")
+                elif v4_indicators['HFT_Activity'] > 0.3:
+                    risk_factors.append("🟡 Moderate HFT Activity")
+                if v4_indicators['Stop_Hunting'] > 0:
+                    risk_factors.append("🔴 Stop Hunting Pattern")
+                
+                # Calculate volume delta significance
+                volume_delta = v4_indicators['Volume_Delta']
+                if abs(volume_delta) > 0.5:
+                    delta_type = "Buying" if volume_delta > 0 else "Selling"
+                    risk_factors.append(f"🟡 Strong {delta_type} Pressure ({volume_delta:.2f})")
+                
+                if risk_factors:
+                    for factor in risk_factors:
+                        st.markdown(factor)
+                else:
+                    st.markdown("✅ No significant risk factors detected")
+            
+            # Add explanation of trap risk indicators
+            with st.expander("ℹ️ About Trap Risk Indicators"):
+                st.markdown("""
+                **Price-Volume Analysis** helps detect potential false signals and market manipulation:
+                
+                - **Bull/Bear Traps**: False breakouts designed to trap traders in the wrong direction
+                - **Volume-Price Divergence**: When price movement isn't supported by corresponding volume
+                - **HFT Activity**: High-frequency trading creating misleading price signals
+                - **Stop Hunting**: Large players deliberately triggering retail stop losses
+                - **False Breakout Patterns**: Breakouts that fail to follow through
+                
+                **Trap Risk Levels:**
+                - 🟢 **Low**: Low probability of false signal/trap
+                - 🟡 **Medium**: Some risk factors present - use caution
+                - 🔴 **High**: Multiple risk factors detected - high chance of false signal
+                - ⚫ **Unknown**: Insufficient data to assess trap risk
+                """)
+            
+            # NEW: Add Pattern vs Risk Analysis
+            st.markdown("---")
+            st.subheader("🔄 Pattern vs Risk Analysis")
+            
+            # Remove the expander from here
+            
+            # Identify active technical patterns
+            active_patterns = []
+            
+            # Check for bullish patterns
+            if latest.get('RSI', 0) < 40 and latest.get('Stoch_K', 0) < 30:
+                active_patterns.append(("Oversold Condition", "Bullish"))
+            if latest.get('MACD', 0) > latest.get('MACD_Signal', 0):
+                active_patterns.append(("MACD Bullish Crossover", "Bullish"))
+            if latest.get('Hammer', False):
+                active_patterns.append(("Hammer Pattern", "Bullish"))
+            if latest.get('Inverse_Head_And_Shoulders', False):
+                active_patterns.append(("Inverse Head & Shoulders", "Bullish"))
+            if latest.get('Double_Bottom', False):
+                active_patterns.append(("Double Bottom", "Bullish"))
+            if latest.get('Ascending_Triangle', False):
+                active_patterns.append(("Ascending Triangle", "Bullish"))
+            if latest.get('Golden_Cross', False) or (latest.get('SMA_50', 0) > latest.get('SMA_200', 0) and df_with_indicators['SMA_50'].iloc[-2] <= df_with_indicators['SMA_200'].iloc[-2]):
+                active_patterns.append(("Golden Cross", "Bullish"))
+                
+            # Check for bearish patterns
+            if latest.get('RSI', 0) > 60 and latest.get('Stoch_K', 0) > 70:
+                active_patterns.append(("Overbought Condition", "Bearish"))
+            if latest.get('MACD', 0) < latest.get('MACD_Signal', 0):
+                active_patterns.append(("MACD Bearish Crossover", "Bearish"))
+            if latest.get('Shooting_Star', False):
+                active_patterns.append(("Shooting Star", "Bearish"))
+            if latest.get('Head_And_Shoulders', False):
+                active_patterns.append(("Head & Shoulders", "Bearish"))
+            if latest.get('Double_Top', False):
+                active_patterns.append(("Double Top", "Bearish"))
+            if latest.get('Descending_Triangle', False):
+                active_patterns.append(("Descending Triangle", "Bearish"))
+            if latest.get('Death_Cross', False) or (latest.get('SMA_50', 0) < latest.get('SMA_200', 0) and df_with_indicators['SMA_50'].iloc[-2] >= df_with_indicators['SMA_200'].iloc[-2]):
+                active_patterns.append(("Death Cross", "Bearish"))
+            
+            # Determine pattern direction
+            if active_patterns:
+                bullish_count = sum(1 for _, direction in active_patterns if direction == "Bullish")
+                bearish_count = sum(1 for _, direction in active_patterns if direction == "Bearish")
+                
+                if bullish_count > bearish_count:
+                    pattern_direction = "Bullish"
+                elif bearish_count > bullish_count:
+                    pattern_direction = "Bearish"
+                else:
+                    pattern_direction = "Mixed"
+            else:
+                pattern_direction = "Neutral"
+            
+            # Determine risk direction
+            bull_trap = v4_indicators['Bull_Trap'] > 0
+            bear_trap = v4_indicators['Bear_Trap'] > 0
+            false_breakout = v4_indicators['False_Breakout'] != 0
+            volume_price_divergence = v4_indicators['Volume_Price_Divergence']
+            
+            if bull_trap:
+                risk_direction = "Bearish"  # Bull trap is bearish (false bullish signal)
+            elif bear_trap:
+                risk_direction = "Bullish"  # Bear trap is bullish (false bearish signal)
+            elif false_breakout != 0:
+                # Determine direction of false breakout
+                if false_breakout > 0:
+                    risk_direction = "Bearish"  # False upward breakout
+                else:
+                    risk_direction = "Bullish"  # False downward breakout
+            elif volume_price_divergence != 0:
+                if volume_price_divergence > 0:
+                    risk_direction = "Bearish"  # Bullish price with weak volume is bearish
+                else:
+                    risk_direction = "Bullish"  # Bearish price with weak volume is bullish
+            else:
+                risk_direction = "Neutral"
+            
+            # Check for pattern-risk alignment
+            if pattern_direction == "Neutral" or risk_direction == "Neutral":
+                alignment = "Neutral"
+            elif pattern_direction == risk_direction:
+                alignment = "Aligned"
+            else:
+                alignment = "Conflicting"
+            
+            # Display pattern-risk alignment
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("### Technical Pattern Direction:")
+                pattern_color = "green" if pattern_direction == "Bullish" else "red" if pattern_direction == "Bearish" else "gray"
+                st.markdown(f"<h3 style='color: {pattern_color};'>{pattern_direction}</h3>", unsafe_allow_html=True)
+                
+                if active_patterns:
+                    st.markdown("**Active Patterns:**")
+                    for pattern, direction in active_patterns:
+                        direction_emoji = "🟢" if direction == "Bullish" else "🔴" if direction == "Bearish" else "⚪"
+                        st.markdown(f"{direction_emoji} {pattern}")
+                else:
+                    st.markdown("No clear technical patterns detected")
+            
+            with col2:
+                st.markdown("### Risk Factor Direction:")
+                risk_color = "green" if risk_direction == "Bullish" else "red" if risk_direction == "Bearish" else "gray"
+                st.markdown(f"<h3 style='color: {risk_color};'>{risk_direction}</h3>", unsafe_allow_html=True)
+                
+                # Display alignment status with icon
+                alignment_emoji = "✅" if alignment == "Aligned" else "⚠️" if alignment == "Conflicting" else "⚪"
+                alignment_color = "green" if alignment == "Aligned" else "orange" if alignment == "Conflicting" else "gray"
+                
+                st.markdown(f"### Signal-Risk Alignment: <span style='color: {alignment_color};'>{alignment_emoji} {alignment}</span>", unsafe_allow_html=True)
+                
+                if alignment == "Conflicting":
+                    st.markdown("""
+                    ⚠️ **Warning:** Technical patterns and risk factors are showing conflicting signals.
+                    Consider waiting for confirmation or reducing position size.
+                    """)
+                elif alignment == "Aligned":
+                    st.markdown("""
+                    ✅ **Confirmation:** Technical patterns and risk analysis are aligned.
+                    This increases confidence in the signal direction.
+                    """)
+            
+            # Add the expander at the bottom of the section
+            with st.expander("ℹ️ About Pattern vs Risk Analysis"):
+                st.markdown("""
+                **Pattern vs Risk Analysis** compares traditional technical patterns with advanced risk factors:
+                
+                - **Signal Alignment**: When technical patterns and risk factors point in the same direction, increasing confidence
+                - **Signal Conflict**: When technical patterns and risk factors contradict each other, suggesting caution
+                - **Pattern Direction**: Determined by analyzing RSI, MACD, chart patterns, and moving averages
+                - **Risk Direction**: Determined by analyzing traps, false breakouts, and volume-price relationships
+                
+                **Alignment Status:**
+                - ✅ **Aligned**: Technical patterns and risk factors point in the same direction (high confidence)
+                - ⚠️ **Conflicting**: Technical patterns and risk factors contradict each other (use caution)
+                - ⚪ **Neutral**: Either patterns or risk factors don't show a clear direction
+                """)
+            
             # Get latest data for AI analysis
             latest = df_with_indicators.iloc[-1]
             technical_data = {
@@ -908,7 +1131,7 @@ def analyze_symbol(symbol: str, period: str):
             - Always consider market conditions and sector strength
             - Monitor for momentum fade or reversal patterns
             """)
-        
+            
         except Exception as e:
             st.error(f"Error analyzing signals: {str(e)}")
             st.info("This may be due to insufficient data or missing indicators. Try a longer time period.")
@@ -1112,6 +1335,9 @@ def display_screening_results(results: Dict):
             
             formal_data = []
             for result in formal_signals:
+                # Calculate trap risk indicator
+                trap_risk = get_trap_risk_indicator(result)
+                
                 formal_data.append({
                     'Symbol': result['symbol'],
                     'Price': f"${result['current_price']:.2f}",
@@ -1119,6 +1345,7 @@ def display_screening_results(results: Dict):
                     'RSI': f"{result['rsi']:.1f}",
                     'Research Setup': result.get('research_setup', 'Quality Setup'),
                     'Risk Level': result['risk_level'],
+                    'Trap Risk': trap_risk,
                     'Entry Timing': get_entry_timing(result),
                     'Buy Price': f"${result.get('suggested_entry_price', result['current_price']):.2f}",
                     'Stop Loss': f"${result['suggested_stop_loss']:.2f}",
@@ -1141,6 +1368,9 @@ def display_screening_results(results: Dict):
             
             research_data = []
             for result in research_opportunities:
+                # Calculate trap risk indicator
+                trap_risk = get_trap_risk_indicator(result)
+                
                 research_data.append({
                     'Symbol': result['symbol'],
                     'Price': f"${result['current_price']:.2f}",
@@ -1148,6 +1378,7 @@ def display_screening_results(results: Dict):
                     'RSI': f"{result['rsi']:.1f}",
                     'Research Setup': result.get('research_setup', 'Quality Setup'),
                     'Risk Level': result['risk_level'],
+                    'Trap Risk': trap_risk,
                     'Entry Timing': get_entry_timing(result),
                     'Buy Price': f"${result.get('suggested_entry_price', result['current_price']):.2f}",
                     'Stop Loss': f"${result['suggested_stop_loss']:.2f}",
@@ -1191,6 +1422,9 @@ def display_screening_results(results: Dict):
             
             confirmed_data = []
             for result in confirmed_breakouts:
+                # Calculate trap risk indicator
+                trap_risk = get_trap_risk_indicator(result)
+                
                 confirmed_data.append({
                     'Symbol': result['symbol'],
                     'Price': f"${result['current_price']:.2f}",
@@ -1198,6 +1432,7 @@ def display_screening_results(results: Dict):
                     'ADX': f"{result['adx']:.1f}",
                     'Breakout Setup': result.get('breakout_setup', 'Volume Breakout'),
                     'Risk Level': result['risk_level'],
+                    'Trap Risk': trap_risk,
                     'Entry Timing': get_breakout_entry_timing(result),
                     'Buy Price': f"${result.get('suggested_entry_price', result['current_price']):.2f}",
                     'Stop Loss': f"${result['suggested_stop_loss']:.2f}",
@@ -1220,6 +1455,9 @@ def display_screening_results(results: Dict):
             
             pre_breakout_data = []
             for result in pre_breakout_candidates:
+                # Calculate trap risk indicator
+                trap_risk = get_trap_risk_indicator(result)
+                
                 pre_breakout_data.append({
                     'Symbol': result['symbol'],
                     'Price': f"${result['current_price']:.2f}",
@@ -1227,6 +1465,7 @@ def display_screening_results(results: Dict):
                     'ADX': f"{result['adx']:.1f}",
                     'Breakout Setup': result.get('breakout_setup', 'Pre-Breakout'),
                     'Risk Level': result['risk_level'],
+                    'Trap Risk': trap_risk,
                     'Entry Timing': get_breakout_entry_timing(result),
                     'Buy Price': f"${result.get('suggested_entry_price', result['current_price']):.2f}",
                     'Stop Loss': f"${result['suggested_stop_loss']:.2f}",
@@ -1270,6 +1509,12 @@ def display_screening_results(results: Dict):
             - **Consolidation Break**: Breakout from sideways range
             - **Golden Cross**: Moving average crossover breakout
             - **Pre-Breakout**: Building for potential breakout
+            
+            **⚠️ Trap Risk Indicators:**
+            - **🟢 Low**: Low probability of false signal/trap
+            - **🟡 Medium**: Some risk factors present - use caution
+            - **🔴 High**: Multiple risk factors detected - high chance of false signal
+            - **⚫ Unknown**: Insufficient data to assess trap risk
             """)
     
     elif 'breakout' in results:
@@ -1316,6 +1561,68 @@ def display_screening_results(results: Dict):
             st.dataframe(pd.DataFrame(research_opportunities), hide_index=True)
         else:
             st.info("No pre-breakout candidates found.")
+
+def get_trap_risk_indicator(result: Dict) -> str:
+    """
+    Determine the risk of a trap/false signal based on V4.0 price-volume analysis
+    
+    Returns an emoji indicator:
+    🟢 Low risk - unlikely to be a trap
+    🟡 Medium risk - some risk factors present
+    🔴 High risk - multiple risk factors detected
+    ⚫ Unknown - insufficient data
+    """
+    # Check for V4.0 indicators in the result
+    bull_trap = result.get('Bull_Trap', 0) > 0
+    bear_trap = result.get('Bear_Trap', 0) > 0
+    false_breakout = result.get('False_Breakout', 0) != 0
+    volume_price_divergence = result.get('Volume_Price_Divergence', 0) != 0
+    hft_activity = result.get('HFT_Activity', 0) > 0.3  # Moderate or higher HFT activity
+    stop_hunting = result.get('Stop_Hunting', 0) > 0
+    volume_delta = result.get('Volume_Delta', 0)
+    
+    # Check if we have at least some V4.0 data
+    has_v4_data = any(key in result for key in ['Bull_Trap', 'Bear_Trap', 'HFT_Activity', 'False_Breakout'])
+    
+    # Count risk factors
+    risk_factors = 0
+    
+    # Direct trap indicators
+    if bull_trap or bear_trap:
+        risk_factors += 2
+    if false_breakout:
+        risk_factors += 2
+    if stop_hunting:
+        risk_factors += 1
+    
+    # HFT activity levels
+    if result.get('HFT_Activity', 0) > 0.7:  # High HFT activity
+        risk_factors += 2
+    elif hft_activity:  # Moderate HFT activity
+        risk_factors += 1
+    
+    # Volume-price relationship
+    if volume_price_divergence:
+        risk_factors += 1
+    
+    # Volume delta (buying/selling pressure) conflicts with price direction
+    if abs(volume_delta) > 0.5:  # Strong directional volume
+        price_above_ma = result.get('Close', 0) > result.get('SMA_20', result.get('Close', 0))
+        if (volume_delta < -0.5 and price_above_ma) or (volume_delta > 0.5 and not price_above_ma):
+            # Volume direction conflicts with price direction
+            risk_factors += 1
+    
+    # Determine risk level based on factors count
+    if risk_factors >= 3:
+        return "🔴 High"
+    elif risk_factors >= 1:
+        return "🟡 Medium"
+    elif has_v4_data:
+        # We have some V4.0 data and no risk factors were found
+        return "🟢 Low"
+    else:
+        # Not enough data to determine
+        return "⚫ Unknown"
 
 def performance_tab():
     """Performance analytics and reports"""

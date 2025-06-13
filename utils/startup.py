@@ -36,13 +36,12 @@ def initialize_ai_models():
     logger.info("Initializing AI model selection")
     
     try:
-        # Use the ModelManager to check and select the best model
-        selected_model = ModelManager.initialize()
-        
-        logger.info(f"AI model selection complete. Using model: {selected_model}")
+        # Force gpt-4o-mini as the default model
+        API_CONFIG['MODEL'] = "gpt-4o-mini"
+        logger.info(f"AI model selection complete. Forcing model: gpt-4o-mini")
         
         # Return the selected model (useful for debugging or reporting)
-        return selected_model
+        return API_CONFIG['MODEL']
     
     except Exception as e:
         logger.error(f"Error initializing AI models: {str(e)}")

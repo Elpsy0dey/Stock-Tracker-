@@ -137,8 +137,8 @@ class AIService:
                 if datetime.now() - cached_response['timestamp'] < timedelta(hours=1):
                     return cached_response['suggestions']
             
-            # Try with primary model, then fallbacks if needed
-            models_to_try = [API_CONFIG['MODEL']] + [m for m in FALLBACK_MODELS if m != API_CONFIG['MODEL']]
+            # Always try gpt-4o-mini first, then other models if needed
+            models_to_try = ["gpt-4o-mini"] + [m for m in FALLBACK_MODELS if m != "gpt-4o-mini"]
             
             for model in models_to_try:
                 result = cls._try_api_request(technical_data, model)
@@ -216,6 +216,11 @@ class AIService:
                 # For errors related to the model not being available
                 if response.status_code == 503 or response.status_code == 404:
                     print(f"Model {model} not available. Trying next model.")
+                    return None
+                
+                # Check for unauthorized messages in the response text
+                if 'unauthorized' in response.text.lower() or 'auth' in response.text.lower():
+                    print(f"Received 'Unauthorized request' message for model {model}. Trying next model.")
                     return None
                 
                 # For third-party API, handle empty or non-JSON responses
@@ -482,7 +487,7 @@ The technical indicators suggest a {sentiment} outlook.
         Generate performance analysis based on portfolio metrics
         
         Args:
-            technical_data: Dictionary containing portfolio metrics
+            technical_data: Dictionary containing performance metrics and time period
             
         Returns:
             str: AI-generated performance analysis
@@ -497,17 +502,17 @@ The technical indicators suggest a {sentiment} outlook.
             if cache_key in cls._cache:
                 cached_response = cls._cache[cache_key]
                 if datetime.now() - cached_response['timestamp'] < timedelta(hours=1):
-                    return cached_response['analysis']
+                    return cached_response['suggestions']
             
-            # Try with primary model, then fallbacks if needed
-            models_to_try = [API_CONFIG['MODEL']] + [m for m in FALLBACK_MODELS if m != API_CONFIG['MODEL']]
+            # Always try gpt-4o-mini first, then other models if needed
+            models_to_try = ["gpt-4o-mini"] + [m for m in FALLBACK_MODELS if m != "gpt-4o-mini"]
             
             for model in models_to_try:
                 result = cls._try_performance_api_request(technical_data, model)
                 if result:
                     # Cache the successful response
                     cls._cache[cache_key] = {
-                        'analysis': result,
+                        'suggestions': result,
                         'timestamp': datetime.now()
                     }
                     return result

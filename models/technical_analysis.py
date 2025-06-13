@@ -679,7 +679,7 @@ class TechnicalAnalyzer:
                     bearish_pattern = bearish_pattern or df['Head_Shoulders'].iloc[-1]
                 if 'Cup_Handle' in df.columns:
                     bullish_pattern = bullish_pattern or df['Cup_Handle'].iloc[-1]
-                
+                    
                 # V3.0: If patterns aren't required, set both to True
                 if not SWING_PATTERN_CONFIRMATION:
                     bullish_pattern = bearish_pattern = True
@@ -695,7 +695,7 @@ class TechnicalAnalyzer:
                 if len(last_5_rsi) == 5:
                     consistent_rsi_up = all(last_5_rsi[i] <= last_5_rsi[i+1] for i in range(3))
                     consistent_rsi_down = all(last_5_rsi[i] >= last_5_rsi[i+1] for i in range(3))
-                    multi_timeframe_confirm = consistent_rsi_up or consistent_rsi_down
+                multi_timeframe_confirm = consistent_rsi_up or consistent_rsi_down
             
             # --- V3.0: BEARISH SWING SIGNALS WITH MULTI-INDICATOR CONFIRMATION ---
             
@@ -727,12 +727,12 @@ class TechnicalAnalyzer:
             signals['bearish_swing'] = (
                 rsi_overbought and 
                 (stoch_bearish and macd_bearish) and  # V3.0: AND logic, not OR
-                bb_overbought and 
-                near_resistance and 
-                volume_surge and 
-                downtrend and  # Only take bearish swings in downtrends
-                bearish_pattern and 
-                multi_timeframe_confirm and
+                                       bb_overbought and 
+                                       near_resistance and 
+                                       volume_surge and 
+                                       downtrend and  # Only take bearish swings in downtrends
+                                       bearish_pattern and 
+                                       multi_timeframe_confirm and
                 price_in_range and
                 (triple_rsi_bearish or overall_strength(df) < 30)  # Either Triple RSI or weak stock
             )
@@ -767,12 +767,12 @@ class TechnicalAnalyzer:
             signals['bullish_swing'] = (
                 rsi_oversold and 
                 (stoch_bullish and macd_bullish) and  # V3.0: AND logic, not OR
-                bb_oversold and 
-                near_support and 
-                volume_surge and 
-                uptrend and  # Only take bullish swings in uptrends
-                bullish_pattern and
-                multi_timeframe_confirm and
+                                       bb_oversold and 
+                                       near_support and 
+                                       volume_surge and 
+                                       uptrend and  # Only take bullish swings in uptrends
+                                       bullish_pattern and
+                                       multi_timeframe_confirm and
                 price_in_range and
                 (triple_rsi_bullish or overall_strength(df) > 70)  # Either Triple RSI or strong stock
             )
@@ -1052,7 +1052,7 @@ class TechnicalAnalyzer:
                 'trend_score': 50.0,
                 'volume_score': 50.0,
                 'overall_score': 50.0
-            }
+            } 
     
     # ==================== V4.0 PRICE-VOLUME ANALYSIS ====================
 

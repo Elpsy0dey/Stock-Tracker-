@@ -184,7 +184,18 @@ class StockScreener:
             # Determine research setup
             research_setup = self._determine_research_setup(latest, swing_signals, signal_strength)
             
-            return {
+            # Extract V4.0 price-volume analysis indicators
+            v4_indicators = {
+                'Bull_Trap': latest.get('Bull_Trap', 0),
+                'Bear_Trap': latest.get('Bear_Trap', 0),
+                'False_Breakout': latest.get('False_Breakout', 0),
+                'Volume_Price_Divergence': latest.get('Volume_Price_Divergence', 0),
+                'HFT_Activity': latest.get('HFT_Activity', 0),
+                'Stop_Hunting': latest.get('Stop_Hunting', 0),
+                'Volume_Delta': latest.get('Volume_Delta', 0)
+            }
+            
+            result = {
                 'symbol': symbol,
                 'current_price': latest['Close'],
                 'signals': swing_signals,
@@ -209,6 +220,11 @@ class StockScreener:
                 'suggested_take_profit_3': self._calculate_take_profit(latest, level=3, trade_type='swing'),
                 'risk_level': self._assess_risk_level(latest, swing_signals)
             }
+            
+            # Add V4.0 indicators to the result
+            result.update(v4_indicators)
+            
+            return result
             
         except Exception as e:
             return None
@@ -317,7 +333,18 @@ class StockScreener:
             price_change_20d = ((latest['Close'] - df_with_indicators['Close'].iloc[-21]) / df_with_indicators['Close'].iloc[-21]) * 100
             price_vs_52w_high = (latest['Close'] / df_with_indicators['Close'].rolling(252).max().iloc[-1]) * 100
             
-            return {
+            # Extract V4.0 price-volume analysis indicators
+            v4_indicators = {
+                'Bull_Trap': latest.get('Bull_Trap', 0),
+                'Bear_Trap': latest.get('Bear_Trap', 0),
+                'False_Breakout': latest.get('False_Breakout', 0),
+                'Volume_Price_Divergence': latest.get('Volume_Price_Divergence', 0),
+                'HFT_Activity': latest.get('HFT_Activity', 0),
+                'Stop_Hunting': latest.get('Stop_Hunting', 0),
+                'Volume_Delta': latest.get('Volume_Delta', 0)
+            }
+            
+            result = {
                 'symbol': symbol,
                 'current_price': latest['Close'],
                 'signals': breakout_signals,
@@ -343,6 +370,11 @@ class StockScreener:
                 'suggested_take_profit_3': self._calculate_take_profit(latest, level=3, trade_type='breakout'),
                 'risk_level': self._assess_risk_level(latest, breakout_signals)
             }
+            
+            # Add V4.0 indicators to the result
+            result.update(v4_indicators)
+            
+            return result
         except Exception as e:
             return None
     

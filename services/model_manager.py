@@ -20,9 +20,9 @@ logger = logging.getLogger("model_manager")
 # List of models to check in priority order (most preferred first)
 PREFERRED_MODELS = [
     "gpt-4o-mini",          # Best quality
-    "gpt-3.5-turbo-16k",    # Large context window
     "gpt-3.5-turbo-0125",   # Good quality
     "gpt-3.5-turbo-1106",   # Good fallback
+    "gpt-3.5-turbo-16k",    # Large context window
     "gpt-3.5-turbo"         # Original model
 ]
 
