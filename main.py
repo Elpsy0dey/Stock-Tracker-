@@ -918,6 +918,14 @@ def stock_screener_tab():
     st.markdown("<h1 style='font-size: 2.5rem; margin-bottom: 1rem;'>🎯 Stock Screener</h1>", unsafe_allow_html=True)
     st.markdown("Find high-probability trading opportunities using research-based criteria")
     
+    # Store last selected screen type in session state to detect changes
+    if 'last_screen_type' not in st.session_state:
+        st.session_state.last_screen_type = "Both"
+    
+    # Store last selected universe in session state
+    if 'last_universe' not in st.session_state:
+        st.session_state.last_universe = "S&P 500 (Top 50)"
+    
     # Screening options
     col1, col2, col3 = st.columns(3)
     
@@ -926,12 +934,25 @@ def stock_screener_tab():
             "Screening Type",
             ["Swing Trading (1-2 weeks)", "Breakout Trading (1-6 months)", "Both"]
         )
+        
+        # Check if screen type changed to auto-suggest universe
+        if screen_type != st.session_state.last_screen_type:
+            if screen_type == "Swing Trading (1-2 weeks)":
+                st.session_state.last_universe = "Swing-Optimized Universe"
+            elif screen_type == "Breakout Trading (1-6 months)":
+                st.session_state.last_universe = "Breakout-Optimized Universe"
+            # Update last selected type
+            st.session_state.last_screen_type = screen_type
     
     with col2:
         universe = st.selectbox(
             "Stock Universe",
-            ["S&P 500 (Top 50)", "Custom Watchlist"]
+            ["S&P 500 (Top 50)", "Swing-Optimized Universe", "Breakout-Optimized Universe", "Custom Watchlist"],
+            index=["S&P 500 (Top 50)", "Swing-Optimized Universe", "Breakout-Optimized Universe", "Custom Watchlist"].index(st.session_state.last_universe),
+            help="S&P 500: Standard market index stocks\nSwing-Optimized: Stocks with optimal volatility and liquidity for 1-2 week trades\nBreakout-Optimized: Mid-cap growth stocks ideal for breakout patterns\nCustom: Your own symbol list"
         )
+        # Update last selected universe
+        st.session_state.last_universe = universe
     
     with col3:
         max_results = st.slider("Max Results", 5, 50, 20)
@@ -945,6 +966,50 @@ def stock_screener_tab():
         )
         custom_symbols = [s.strip().upper() for s in symbols_input.split(',') if s.strip()]
         st.session_state.stock_screener.set_stock_universe(custom_symbols)
+    elif universe == "Swing-Optimized Universe":
+        # Add info about the swing universe
+        st.info("**Swing-Optimized Universe**: This curated list includes 40+ stocks with characteristics ideal for short-term swing trades (1-2 weeks). The selection features stocks with optimal volatility, strong liquidity, and tendency for mean reversion. Includes large caps with predictable movement patterns, financial stocks for mean-reversion strategies, and retail/healthcare sectors with reliable oscillation patterns.")
+        
+        # Set a universe optimized for swing trading
+        swing_universe = [
+            # Large cap stocks with high liquidity and volatility
+            'AAPL', 'MSFT', 'AMZN', 'GOOGL', 'META', 'TSLA', 'NVDA', 'AMD', 'NFLX',
+            # Mid-cap tech with good movement
+            'PYPL', 'CRWD', 'NET', 'SNAP', 'ETSY', 'PINS', 'TWLO', 'ZS', 'OKTA', 'DDOG',
+            # Financial sector (good for mean-reversion)
+            'JPM', 'BAC', 'C', 'WFC', 'GS', 'MS', 'SCHW',
+            # Retail with strong swings
+            'WMT', 'TGT', 'HD', 'LOW', 'COST', 'SBUX', 'MCD',
+            # Healthcare with momentum
+            'JNJ', 'PFE', 'MRNA', 'BNTX', 'UNH', 'CVS',
+            # Consumer discretionary
+            'AMZN', 'BABA', 'NKE', 'DIS', 'ABNB', 'MAR'
+        ]
+        # Filter out duplicates while maintaining order
+        swing_universe = list(dict.fromkeys(swing_universe))
+        st.session_state.stock_screener.set_stock_universe(swing_universe)
+    elif universe == "Breakout-Optimized Universe":
+        # Add info about the breakout universe
+        st.info("**Breakout-Optimized Universe**: This specialized list of 40+ stocks focuses on mid-cap growth companies ideal for breakout patterns (1-6 month trades). These stocks have higher growth potential, strong momentum characteristics, and trade within the optimal $20-$100 price range identified in our backtesting research. Includes emerging tech leaders, biotech with catalyst potential, clean energy stocks, and innovative fintech companies.")
+        
+        # Set a universe optimized for breakout trading (more mid and small caps)
+        breakout_universe = [
+            # Growth tech stocks good for breakouts
+            'NVDA', 'AMD', 'CRWD', 'NET', 'DDOG', 'ZS', 'SNOW', 'CYBR', 'TTD', 'DOCN',
+            # Mid-cap growth with momentum
+            'ENPH', 'FTNT', 'HUBS', 'GTLB', 'BILL', 'GLOB', 'ESTC', 'TWLO', 'U', 'PATH',
+            # Biotech/Pharma candidates (volatile with catalyst potential)
+            'MRNA', 'BNTX', 'CRSP', 'EDIT', 'NTLA', 'BEAM', 'SGEN', 'EXAS',
+            # Clean energy/EV sector
+            'TSLA', 'RIVN', 'LCID', 'CHPT', 'PLUG', 'ENPH', 'SEDG',
+            # Consumer tech with growth
+            'RBLX', 'PTON', 'DASH', 'ABNB', 'UBER', 'LYFT',
+            # Fintech
+            'SQ', 'PYPL', 'AFRM', 'UPST', 'COIN', 'MELI'
+        ]
+        # Filter out duplicates while maintaining order
+        breakout_universe = list(dict.fromkeys(breakout_universe))
+        st.session_state.stock_screener.set_stock_universe(breakout_universe)
     else:
         st.session_state.stock_screener.set_stock_universe()
     
