@@ -436,83 +436,179 @@ class TechnicalAnalyzer:
     # ==================== COMPREHENSIVE ANALYSIS ====================
     
     def calculate_all_indicators(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Calculate all technical indicators for a given OHLCV DataFrame"""
-        if df.empty or len(df) < 200:  # Need sufficient data
+        """Calculate all technical indicators and return enhanced DataFrame"""
+        if df.empty:
             return df
         
-        result_df = df.copy()
+        # Make a copy to avoid modifying the original
+        result = df.copy()
         
-        # Extract OHLCV
-        high, low, close, volume = df['High'], df['Low'], df['Close'], df['Volume']
-        open_price = df['Open'] if 'Open' in df.columns else close
+        try:
+            # ---- MOMENTUM OSCILLATORS ----
+            result['RSI'] = self.calculate_rsi(result['Close'])
+            
+            stoch_k, stoch_d = self.calculate_stochastic(
+                result['High'], result['Low'], result['Close']
+            )
+            result['Stoch_K'] = stoch_k
+            result['Stoch_D'] = stoch_d
+            
+            result['CCI'] = self.calculate_cci(
+                result['High'], result['Low'], result['Close']
+            )
+            
+            if 'Volume' in result.columns:
+                result['MFI'] = self.calculate_money_flow_index(
+                    result['High'], result['Low'], result['Close'], result['Volume']
+                )
+            
+            result['Williams_R'] = self.calculate_williams_r(
+                result['High'], result['Low'], result['Close']
+            )
+            
+            # ---- TREND INDICATORS ----
+            macd_data = self.calculate_macd(result['Close'])
+            result['MACD'] = macd_data['macd']
+            result['MACD_Signal'] = macd_data['signal']
+            result['MACD_Histogram'] = macd_data['histogram']
+            
+            moving_avgs = self.calculate_moving_averages(result['Close'])
+            for name, series in moving_avgs.items():
+                result[name.upper()] = series
+            
+            adx_data = self.calculate_adx(
+                result['High'], result['Low'], result['Close']
+            )
+            result['ADX'] = adx_data['adx']
+            result['DI_Plus'] = adx_data['di_plus']
+            result['DI_Minus'] = adx_data['di_minus']
+            
+            result['ATR'] = self.calculate_atr(
+                result['High'], result['Low'], result['Close']
+            )
+            
+            # ---- VOLATILITY BANDS ----
+            bb_data = self.calculate_bollinger_bands(result['Close'])
+            result['BB_Upper'] = bb_data['upper']
+            result['BB_Middle'] = bb_data['middle']
+            result['BB_Lower'] = bb_data['lower']
+            result['BB_Width'] = bb_data['width']
+            result['BB_Position'] = bb_data['position']
+            
+            kc_data = self.calculate_keltner_channels(
+                result['High'], result['Low'], result['Close']
+            )
+            result['KC_Upper'] = kc_data['upper']
+            result['KC_Middle'] = kc_data['middle']
+            result['KC_Lower'] = kc_data['lower']
+            
+            dc_data = self.calculate_donchian_channels(
+                result['High'], result['Low']
+            )
+            result['DC_Upper'] = dc_data['upper']
+            result['DC_Middle'] = dc_data['middle']
+            result['DC_Lower'] = dc_data['lower']
+            
+            # ---- VOLUME INDICATORS ----
+            if 'Volume' in result.columns:
+                result['OBV'] = self.calculate_obv(
+                    result['Close'], result['Volume']
+                )
+                
+                result['AD'] = self.calculate_accumulation_distribution(
+                    result['High'], result['Low'], result['Close'], result['Volume']
+                )
+                
+                result['CMF'] = self.calculate_chaikin_money_flow(
+                    result['High'], result['Low'], result['Close'], result['Volume']
+                )
+                
+                result['Volume_SMA'] = self.calculate_volume_sma(result['Volume'])
+            
+            # ---- PATTERN DETECTION ----
+            if 'SMA_50' in result.columns and 'SMA_200' in result.columns:
+                result['Golden_Cross'] = self.detect_golden_cross(
+                    result['SMA_50'], result['SMA_200']
+                )
+                
+                result['Death_Cross'] = self.detect_death_cross(
+                    result['SMA_50'], result['SMA_200']
+                )
+            
+            if 'Volume' in result.columns:
+                result['Breakout'] = self.detect_breakout(
+                    result['Close'], result['High'], result['Low'], result['Volume']
+                )
+                
+                result['Breakdown'] = self.detect_breakdown(
+                    result['Close'], result['Low'], result['Volume']
+                )
+            
+            result['Double_Top'] = self.detect_double_top(
+                result['High'], result['Low'], result['Close']
+            )
+            
+            result['Double_Bottom'] = self.detect_double_bottom(
+                result['High'], result['Low'], result['Close']
+            )
+            
+            result['Head_Shoulders'] = self.detect_head_and_shoulders(
+                result['High'], result['Low'], result['Close']
+            )
+            
+            result['Triangle'] = self.detect_triangle(
+                result['High'], result['Low'], result['Close']
+            )
+            
+            result['Cup_Handle'] = self.detect_cup_and_handle(
+                result['High'], result['Low'], result['Close']
+            )
+            
+            # ---- V4.0 PRICE-VOLUME ANALYSIS ----
+            if 'Volume' in result.columns:
+                # Volume-price divergence
+                result['Volume_Price_Divergence'] = self.detect_volume_price_divergence(
+                    result['Close'], result['Volume']
+                )
+                
+                # Volume delta (buying vs selling pressure)
+                if 'Open' in result.columns:
+                    result['Volume_Delta'] = self.calculate_volume_delta(
+                        result['Open'], result['Close'], result['Volume']
+                    )
+                
+                # Bull and bear trap detection
+                if BULL_BEAR_TRAP_DETECTION:
+                    result['Bull_Trap'] = self.detect_bull_trap(
+                        result['High'], result['Low'], result['Close'], result['Volume']
+                    )
+                    
+                    result['Bear_Trap'] = self.detect_bear_trap(
+                        result['High'], result['Low'], result['Close'], result['Volume']
+                    )
+                
+                # False breakout detection
+                if FALSE_BREAKOUT_DETECTION:
+                    result['False_Breakout'] = self.detect_false_breakout(
+                        result['High'], result['Low'], result['Close'], result['Volume']
+                    )
+                
+                # HFT activity detection
+                result['HFT_Activity'] = self.detect_hft_activity(
+                    result['High'], result['Low'], result['Close'], result['Volume']
+                )
+                
+                # Stop hunting detection
+                if STOP_HUNT_DETECTION and 'ATR' in result.columns:
+                    result['Stop_Hunting'] = self.detect_stop_hunting(
+                        result['High'], result['Low'], result['Close'], 
+                        result['Volume'], result['ATR']
+                    )
+            
+        except Exception as e:
+            print(f"Error calculating indicators: {e}")
         
-        # Momentum Oscillators
-        result_df['RSI'] = self.calculate_rsi(close)
-        stoch_k, stoch_d = self.calculate_stochastic(high, low, close)
-        result_df['Stoch_K'] = stoch_k
-        result_df['Stoch_D'] = stoch_d
-        result_df['CCI'] = self.calculate_cci(high, low, close)
-        result_df['MFI'] = self.calculate_money_flow_index(high, low, close, volume)
-        result_df['Williams_R'] = self.calculate_williams_r(high, low, close)
-        
-        # Trend Indicators
-        macd_dict = self.calculate_macd(close)
-        result_df['MACD'] = macd_dict['macd']
-        result_df['MACD_Signal'] = macd_dict['signal']
-        result_df['MACD_Histogram'] = macd_dict['histogram']
-        
-        ma_dict = self.calculate_moving_averages(close)
-        for key, value in ma_dict.items():
-            result_df[key.upper()] = value
-        
-        adx_dict = self.calculate_adx(high, low, close)
-        result_df['ADX'] = adx_dict['adx']
-        result_df['DI_Plus'] = adx_dict['di_plus']
-        result_df['DI_Minus'] = adx_dict['di_minus']
-        
-        result_df['ATR'] = self.calculate_atr(high, low, close)
-        
-        # Volatility Bands
-        bb_dict = self.calculate_bollinger_bands(close)
-        result_df['BB_Upper'] = bb_dict['upper']
-        result_df['BB_Middle'] = bb_dict['middle']
-        result_df['BB_Lower'] = bb_dict['lower']
-        result_df['BB_Width'] = bb_dict['width']
-        result_df['BB_Position'] = bb_dict['position']
-        
-        kc_dict = self.calculate_keltner_channels(high, low, close)
-        result_df['KC_Upper'] = kc_dict['upper']
-        result_df['KC_Middle'] = kc_dict['middle']
-        result_df['KC_Lower'] = kc_dict['lower']
-        
-        dc_dict = self.calculate_donchian_channels(high, low)
-        result_df['DC_Upper'] = dc_dict['upper']
-        result_df['DC_Middle'] = dc_dict['middle']
-        result_df['DC_Lower'] = dc_dict['lower']
-        
-        # Volume Indicators
-        result_df['OBV'] = self.calculate_obv(close, volume)
-        result_df['AD_Line'] = self.calculate_accumulation_distribution(high, low, close, volume)
-        result_df['CMF'] = self.calculate_chaikin_money_flow(high, low, close, volume)
-        result_df['Volume_SMA'] = self.calculate_volume_sma(volume)
-        
-        # Pattern Detection
-        result_df['Golden_Cross'] = self.detect_golden_cross(result_df['SMA_50'], result_df['SMA_200'])
-        result_df['Death_Cross'] = self.detect_death_cross(result_df['SMA_50'], result_df['SMA_200'])
-        result_df['Breakout'] = self.detect_breakout(close, high, low, volume)
-        result_df['Breakdown'] = self.detect_breakdown(close, low, volume)
-        result_df['Double_Top'] = self.detect_double_top(high, low, close)
-        result_df['Double_Bottom'] = self.detect_double_bottom(high, low, close)
-        result_df['Head_Shoulders'] = self.detect_head_and_shoulders(high, low, close)
-        
-        triangle_patterns = self.detect_triangle(high, low, close)
-        result_df['Triangle_Ascending'] = triangle_patterns['ascending']
-        result_df['Triangle_Descending'] = triangle_patterns['descending']
-        result_df['Triangle_Symmetrical'] = triangle_patterns['symmetrical']
-        
-        result_df['Cup_Handle'] = self.detect_cup_and_handle(high, low, close)
-        
-        return result_df
+        return result
     
     def get_swing_signals(self, df: pd.DataFrame) -> Dict[str, bool]:
         """
@@ -956,4 +1052,376 @@ class TechnicalAnalyzer:
                 'trend_score': 50.0,
                 'volume_score': 50.0,
                 'overall_score': 50.0
-            } 
+            }
+    
+    # ==================== V4.0 PRICE-VOLUME ANALYSIS ====================
+
+    def detect_volume_price_divergence(self, close: pd.Series, volume: pd.Series, 
+                                     window: int = VOLUME_PRICE_DIVERGENCE_WINDOW) -> pd.Series:
+        """
+        Detect divergence between price movement and volume
+        
+        Based on research paper findings:
+        - Price rising on declining volume (bearish divergence)
+        - Price falling on declining volume (bullish divergence)
+        
+        Returns a Series with values:
+        1 = bullish divergence
+        -1 = bearish divergence
+        0 = no divergence
+        """
+        if len(close) < window + 1:
+            return pd.Series(0, index=close.index)
+            
+        divergence = pd.Series(0, index=close.index)
+        
+        # Calculate price and volume trends
+        for i in range(window, len(close)):
+            # Get current window
+            price_window = close.iloc[i-window:i+1]
+            volume_window = volume.iloc[i-window:i+1]
+            
+            # Calculate trends
+            price_trend = 1 if price_window.iloc[-1] > price_window.iloc[0] else -1
+            
+            # Calculate volume trend using linear regression slope
+            volume_indices = np.arange(len(volume_window))
+            volume_slope = np.polyfit(volume_indices, volume_window, 1)[0]
+            volume_trend = 1 if volume_slope > 0 else -1
+            
+            # Detect divergence
+            if price_trend == 1 and volume_trend == -1:
+                # Bearish divergence: Price up, volume down
+                divergence.iloc[i] = -1
+            elif price_trend == -1 and volume_trend == -1:
+                # Bullish divergence: Price down, volume down
+                divergence.iloc[i] = 1
+                
+        return divergence
+    
+    def calculate_volume_delta(self, open_prices: pd.Series, close: pd.Series, 
+                             volume: pd.Series) -> pd.Series:
+        """
+        Calculate volume delta (buying vs selling pressure)
+        
+        Volume delta measures the imbalance between buying and selling volume
+        Positive values indicate more buying pressure, negative values indicate more selling pressure
+        
+        Returns a Series with values between -1 and 1
+        """
+        # Determine if price closed higher or lower than open
+        price_direction = np.sign(close - open_prices)
+        
+        # Calculate volume delta
+        volume_delta = price_direction * volume
+        
+        # Normalize to -1 to 1 range
+        max_volume = volume.rolling(window=20).max()
+        normalized_delta = volume_delta / max_volume
+        
+        return normalized_delta
+    
+    def detect_bull_trap(self, high: pd.Series, low: pd.Series, close: pd.Series, 
+                       volume: pd.Series, resistance_level: pd.Series = None) -> pd.Series:
+        """
+        Detect potential bull traps (false breakouts to the upside)
+        
+        Based on research paper findings:
+        - Price breaks above resistance
+        - Volume spike not sustained
+        - Price quickly reverses back below resistance
+        
+        Returns a Series with 1 where bull traps are detected, 0 otherwise
+        """
+        if len(close) < 5:
+            return pd.Series(0, index=close.index)
+            
+        bull_traps = pd.Series(0, index=close.index)
+        
+        # If no resistance level provided, use rolling max as proxy
+        if resistance_level is None:
+            resistance_level = high.rolling(window=20).max().shift(1)
+        
+        # Calculate volume ratio to detect spikes
+        volume_ratio = volume / volume.rolling(window=10).mean()
+        
+        # Calculate price reversal
+        price_change_pct = close.pct_change(3)  # 3-day price change
+        
+        for i in range(4, len(close)):
+            # Check for breakout above resistance
+            breakout = close.iloc[i-1] > resistance_level.iloc[i-1]
+            
+            # Check for volume spike that's not sustained
+            volume_spike = volume_ratio.iloc[i-1] > BULL_TRAP_VOLUME_THRESHOLD
+            volume_fade = volume.iloc[i] < volume.iloc[i-1] * 0.8
+            
+            # Check for price reversal
+            reversal = price_change_pct.iloc[i] < -TRAP_REVERSAL_THRESHOLD
+            
+            # Bull trap condition
+            if breakout and volume_spike and volume_fade and reversal:
+                bull_traps.iloc[i] = 1
+                
+        return bull_traps
+    
+    def detect_bear_trap(self, high: pd.Series, low: pd.Series, close: pd.Series, 
+                       volume: pd.Series, support_level: pd.Series = None) -> pd.Series:
+        """
+        Detect potential bear traps (false breakdowns to the downside)
+        
+        Based on research paper findings:
+        - Price breaks below support
+        - Volume spike not sustained
+        - Price quickly reverses back above support
+        
+        Returns a Series with 1 where bear traps are detected, 0 otherwise
+        """
+        if len(close) < 5:
+            return pd.Series(0, index=close.index)
+            
+        bear_traps = pd.Series(0, index=close.index)
+        
+        # If no support level provided, use rolling min as proxy
+        if support_level is None:
+            support_level = low.rolling(window=20).min().shift(1)
+        
+        # Calculate volume ratio to detect spikes
+        volume_ratio = volume / volume.rolling(window=10).mean()
+        
+        # Calculate price reversal
+        price_change_pct = close.pct_change(3)  # 3-day price change
+        
+        for i in range(4, len(close)):
+            # Check for breakdown below support
+            breakdown = close.iloc[i-1] < support_level.iloc[i-1]
+            
+            # Check for volume spike that's not sustained
+            volume_spike = volume_ratio.iloc[i-1] > BEAR_TRAP_VOLUME_THRESHOLD
+            volume_fade = volume.iloc[i] < volume.iloc[i-1] * 0.8
+            
+            # Check for price reversal
+            reversal = price_change_pct.iloc[i] > TRAP_REVERSAL_THRESHOLD
+            
+            # Bear trap condition
+            if breakdown and volume_spike and volume_fade and reversal:
+                bear_traps.iloc[i] = 1
+                
+        return bear_traps
+    
+    def detect_false_breakout(self, high: pd.Series, low: pd.Series, close: pd.Series, 
+                            volume: pd.Series, period: int = 20) -> pd.Series:
+        """
+        Detect false breakouts based on price-volume relationships
+        
+        Based on research paper findings:
+        - Price breaks above resistance or below support
+        - Volume doesn't confirm the move
+        - Price quickly reverses
+        
+        Returns a Series with:
+        1 = false upside breakout (bull trap)
+        -1 = false downside breakout (bear trap)
+        0 = no false breakout
+        """
+        if len(close) < period + 5:
+            return pd.Series(0, index=close.index)
+            
+        false_breakouts = pd.Series(0, index=close.index)
+        
+        # Calculate resistance and support levels
+        resistance = high.rolling(window=period).max().shift(1)
+        support = low.rolling(window=period).min().shift(1)
+        
+        # Calculate volume confirmation
+        volume_ratio = volume / volume.rolling(window=period).mean()
+        
+        # Calculate price changes
+        price_change_next_day = close.pct_change(1).shift(-1)
+        price_change_3day = close.pct_change(3).shift(-3)
+        
+        for i in range(period, len(close) - 3):
+            # Check for breakout above resistance
+            upside_breakout = close.iloc[i] > resistance.iloc[i]
+            
+            # Check for breakdown below support
+            downside_breakout = close.iloc[i] < support.iloc[i]
+            
+            # Check for volume confirmation
+            volume_confirms = volume_ratio.iloc[i] > FALSE_BREAKOUT_VOLUME_THRESHOLD
+            
+            # Check for reversal
+            upside_reversal = price_change_3day.iloc[i] < -TRAP_REVERSAL_THRESHOLD
+            downside_reversal = price_change_3day.iloc[i] > TRAP_REVERSAL_THRESHOLD
+            
+            # Detect false breakouts
+            if upside_breakout and not volume_confirms and upside_reversal:
+                false_breakouts.iloc[i] = 1  # False upside breakout
+            elif downside_breakout and not volume_confirms and downside_reversal:
+                false_breakouts.iloc[i] = -1  # False downside breakout
+                
+        return false_breakouts
+    
+    def detect_hft_activity(self, high: pd.Series, low: pd.Series, close: pd.Series, 
+                          volume: pd.Series) -> pd.Series:
+        """
+        Detect potential high-frequency trading (HFT) activity
+        
+        Based on research paper findings:
+        - Rapid price changes with abnormal volume patterns
+        - "Flickering quotes" - quick order submissions and cancellations
+        - Volume spikes without sustained follow-through
+        
+        Returns a Series with values between 0 and 1 indicating HFT activity probability
+        """
+        if len(close) < 10:
+            return pd.Series(0, index=close.index)
+            
+        hft_activity = pd.Series(0, index=close.index)
+        
+        # Calculate price volatility (high-low range)
+        price_range = (high - low) / close
+        
+        # Calculate abnormal price ranges
+        avg_range = price_range.rolling(window=20).mean()
+        range_ratio = price_range / avg_range
+        
+        # Calculate volume patterns
+        volume_ratio = volume / volume.rolling(window=20).mean()
+        volume_change = volume.pct_change().abs()
+        
+        # Calculate price reversals
+        price_reversals = close.diff().apply(lambda x: 1 if x != 0 else 0).diff().abs()
+        
+        for i in range(20, len(close)):
+            # Count rapid price changes in last 5 bars
+            rapid_changes = sum(price_reversals.iloc[i-5:i] > 0)
+            
+            # Check for abnormal range with high volume
+            abnormal_range = range_ratio.iloc[i] > 2.0
+            abnormal_volume = volume_ratio.iloc[i] > 2.0
+            
+            # Check for volume spike followed by drop
+            volume_spike_drop = (volume_ratio.iloc[i-1] > 2.0 and 
+                               volume_ratio.iloc[i] < volume_ratio.iloc[i-1] * 0.5)
+            
+            # HFT activity score (0-1)
+            score = 0
+            if rapid_changes >= FLICKERING_QUOTE_THRESHOLD:
+                score += 0.4
+            if abnormal_range and abnormal_volume:
+                score += 0.3
+            if volume_spike_drop:
+                score += 0.3
+                
+            hft_activity.iloc[i] = min(1.0, score)
+                
+        return hft_activity
+    
+    def analyze_market_depth(self, bid_prices: pd.Series, bid_sizes: pd.Series,
+                           ask_prices: pd.Series, ask_sizes: pd.Series,
+                           volume: pd.Series) -> Dict[str, float]:
+        """
+        Analyze market depth and order book data
+        
+        Based on research paper findings:
+        - Calculate volume/depth ratio
+        - Detect order book imbalances
+        - Identify potential fake liquidity
+        
+        Returns a dictionary with market depth metrics
+        """
+        # This is a simplified implementation since we don't have real-time order book data
+        # In a production environment, this would use actual market depth data
+        
+        results = {}
+        
+        # Calculate bid-ask spread
+        if len(bid_prices) > 0 and len(ask_prices) > 0:
+            mid_price = (bid_prices.iloc[-1] + ask_prices.iloc[-1]) / 2
+            spread = ask_prices.iloc[-1] - bid_prices.iloc[-1]
+            spread_pct = spread / mid_price
+            
+            results['bid_ask_spread'] = spread
+            results['spread_pct'] = spread_pct
+            
+            # Flag wide spreads
+            results['wide_spread'] = spread_pct > BID_ASK_SPREAD_WARNING
+        
+        # Calculate market depth
+        if len(bid_sizes) > 0 and len(ask_sizes) > 0:
+            total_bid_depth = bid_sizes.sum()
+            total_ask_depth = ask_sizes.sum()
+            total_depth = total_bid_depth + total_ask_depth
+            
+            results['total_depth'] = total_depth
+            
+            # Calculate order book imbalance
+            if total_depth > 0:
+                bid_ask_imbalance = abs(total_bid_depth - total_ask_depth) / total_depth
+                results['bid_ask_imbalance'] = bid_ask_imbalance
+                
+                # Flag significant imbalances
+                results['significant_imbalance'] = bid_ask_imbalance > ORDER_FLOW_IMBALANCE_THRESHOLD
+            
+            # Calculate volume/depth ratio
+            if total_depth > 0 and len(volume) > 0:
+                latest_volume = volume.iloc[-1]
+                volume_depth_ratio = latest_volume / total_depth
+                results['volume_depth_ratio'] = volume_depth_ratio
+                
+                # Flag suspicious volume/depth ratio
+                results['suspicious_liquidity'] = volume_depth_ratio > VOLUME_DEPTH_RATIO_THRESHOLD
+        
+        return results
+    
+    def detect_stop_hunting(self, high: pd.Series, low: pd.Series, close: pd.Series, 
+                          volume: pd.Series, atr: pd.Series = None) -> pd.Series:
+        """
+        Detect potential stop hunting patterns
+        
+        Based on research paper findings:
+        - Sharp price moves that trigger common stop levels
+        - Followed by immediate reversal
+        - Often accompanied by volume spikes
+        
+        Returns a Series with 1 where stop hunting is detected, 0 otherwise
+        """
+        if len(close) < 20:
+            return pd.Series(0, index=close.index)
+            
+        stop_hunting = pd.Series(0, index=close.index)
+        
+        # Calculate ATR if not provided
+        if atr is None:
+            atr = self.calculate_atr(high, low, close)
+        
+        # Calculate common stop levels (round numbers, prior day high/low, key MAs)
+        prior_day_high = high.shift(1)
+        prior_day_low = low.shift(1)
+        
+        # Calculate volume spikes
+        volume_ratio = volume / volume.rolling(window=20).mean()
+        
+        for i in range(20, len(close)):
+            # Check for price spike beyond common stop levels
+            spike_beyond_prior_high = high.iloc[i] > prior_day_high.iloc[i] and low.iloc[i] < prior_day_high.iloc[i]
+            spike_beyond_prior_low = low.iloc[i] < prior_day_low.iloc[i] and high.iloc[i] > prior_day_low.iloc[i]
+            
+            # Check for intraday reversal (high-low range > 2x ATR)
+            intraday_reversal = (high.iloc[i] - low.iloc[i]) > (2 * atr.iloc[i])
+            
+            # Check for volume spike
+            volume_spike = volume_ratio.iloc[i] > 1.5
+            
+            # Check for price reversal next day
+            if i < len(close) - 1:
+                next_day_reversal = (close.iloc[i] - close.iloc[i-1]) * (close.iloc[i+1] - close.iloc[i]) < 0
+            else:
+                next_day_reversal = False
+            
+            # Stop hunting pattern
+            if (spike_beyond_prior_high or spike_beyond_prior_low) and intraday_reversal and volume_spike and next_day_reversal:
+                stop_hunting.iloc[i] = 1
+                
+        return stop_hunting 

@@ -348,12 +348,10 @@ class StockScreener:
     
     def _check_research_breakout_criteria(self, latest: pd.Series, breakout_signals: Dict, signal_strength: Dict) -> bool:
         """
-        Check for breakout opportunities based on V3.0 backtest evidence
+        Check for breakout opportunities based on V4.0 backtest evidence
         
-        Implements improvements from 5,000+ trade sample with statistically significant results:
-        - Prioritizes mid-cap stocks ($2B-$10B) with 58% breakout success rate
-        - Enhanced volume filter capturing 91% of significant moves
-        - Multi-timeframe confirmation with 82% false positive reduction
+        Implements improvements from 5,000+ trade sample with statistically significant results
+        and additional false signal detection from price-volume research
         """
         try:
             # Get stock symbol for sector-specific optimization
@@ -368,7 +366,38 @@ class StockScreener:
             price = latest.get('Close', 50)
             market_cap = None
             
-            # --- V3.0 MARKET CAP TARGETING (58% success with mid-caps) ---
+            # V4.0: Check for false signals using new indicators
+            bull_trap = latest.get('Bull_Trap', 0) > 0
+            bear_trap = latest.get('Bear_Trap', 0) > 0
+            false_breakout = latest.get('False_Breakout', 0) != 0
+            volume_price_divergence = latest.get('Volume_Price_Divergence', 0)
+            hft_activity = latest.get('HFT_Activity', 0) > 0.5  # High HFT activity
+            stop_hunting = latest.get('Stop_Hunting', 0) > 0
+            
+            # V4.0: Reject signals with detected false patterns
+            if bull_trap or bear_trap or false_breakout or hft_activity or stop_hunting:
+                print(f"    ❌ {symbol}: False breakout signal detected - bull_trap={bull_trap}, bear_trap={bear_trap}, "
+                      f"false_breakout={false_breakout}, hft_activity={hft_activity}, stop_hunting={stop_hunting}")
+                return False
+            
+            # V4.0: Check for volume-price divergence
+            if volume_price_divergence == -1 and price > latest.get('SMA_20', price):
+                # Bearish divergence during uptrend - potential false breakout
+                print(f"    ❌ {symbol}: Bearish volume-price divergence detected in uptrend")
+                return False
+            
+            # V4.0: Check volume delta (buying vs selling pressure)
+            volume_delta = latest.get('Volume_Delta', 0)
+            if volume_delta < -VOLUME_DELTA_THRESHOLD and price > latest.get('SMA_20', price):
+                # Strong selling pressure during uptrend - potential false breakout
+                print(f"    ❌ {symbol}: Strong selling pressure conflicts with uptrend breakout")
+                return False
+            elif volume_delta > VOLUME_DELTA_THRESHOLD and price < latest.get('SMA_20', price):
+                # Strong buying pressure during downtrend - potential false breakdown
+                print(f"    ❌ {symbol}: Strong buying pressure conflicts with downtrend breakdown")
+                return False
+            
+            # --- V4.0 MARKET CAP TARGETING (58% success with mid-caps) ---
             
             # Attempt to retrieve market cap data - in a production system
             # this would connect to a proper market cap data source
@@ -389,7 +418,7 @@ class StockScreener:
                 # If no market cap data, assume it might be in range
                 in_preferred_cap_range = True
             
-            # --- V3.0 SECTOR-SPECIFIC OPTIMIZATIONS ---
+            # --- V4.0 SECTOR-SPECIFIC OPTIMIZATIONS ---
             
             # In a real implementation, this would use an actual sector lookup service
             is_tech_stock = symbol in ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'TSLA', 'META', 'AMD', 'NFLX']
@@ -404,6 +433,10 @@ class StockScreener:
                 # Tech stocks need even higher volume for confirmed breakouts
                 required_volume = TECH_SECTOR_VOLUME_MULTIPLIER
                 
+            # V4.0: Require even higher volume if HFT activity is detected
+            if latest.get('HFT_Activity', 0) > 0.3:  # Moderate HFT activity
+                required_volume *= 1.2  # Increase volume requirement by 20%
+                
             volume_breakout = volume_surge > required_volume and price > latest.get('SMA_20', 0)
             
             # 2. RESISTANCE BREAK (research showed more reliable when price breaks key level)
@@ -417,7 +450,7 @@ class StockScreener:
                 latest.get('MACD', 0) > latest.get('MACD_Signal', 0)
             )
             
-            # --- V3.0 MULTI-TIMEFRAME CONFIRMATION ---
+            # --- V4.0 MULTI-TIMEFRAME CONFIRMATION ---
             # Backtest showed 82% false positive reduction with multi-timeframe requirement
             multi_timeframe_confirmed = True  # Default if we can't check
             
@@ -437,7 +470,7 @@ class StockScreener:
                 # If we can't check, assume it might be confirmed
                 multi_timeframe_confirmed = True
             
-            # --- V3.0 RESEARCH-BACKED CRITERIA ---
+            # --- V4.0 RESEARCH-BACKED CRITERIA ---
             
             # 4. PRICE RANGE FILTER (68% higher success rate in optimal range)
             price_range_optimal = BREAKOUT_OPTIMAL_PRICE_RANGE[0] <= price <= BREAKOUT_OPTIMAL_PRICE_RANGE[1]
@@ -448,25 +481,36 @@ class StockScreener:
             # 6. CONSOLIDATION QUALITY (tighter range = better breakouts)
             consolidation_quality = breakout_signals.get('consolidation_breakout', False)
             
+            # --- V4.0 CANDLESTICK PATTERN CHECK ---
+            
+            # Check for bearish reversal patterns that might invalidate breakout
+            bearish_reversal_pattern = False
+            if CANDLESTICK_REVERSAL_PATTERNS:
+                # This is a simplified check - in production would use actual pattern recognition
+                if latest.get('Double_Top', 0) > 0 or latest.get('Head_Shoulders', 0) > 0:
+                    bearish_reversal_pattern = True
+                    print(f"    ❌ {symbol}: Bearish reversal pattern detected")
+            
             # --- ACCEPTANCE CRITERIA ---
             
-            # V3.0: Must have volume surge AND either resistance break or proper consolidation
+            # V4.0: Must have volume surge AND either resistance break or proper consolidation
             essential_criteria = volume_breakout and (resistance_break or consolidation_quality)
             
-            # V3.0: Must have ALL these core criteria now (much stricter than before)
+            # V4.0: Must have ALL these core criteria now (much stricter than before)
             core_criteria = (
                 trend_confirmation and
                 price_range_optimal and
-                multi_timeframe_confirmed
+                multi_timeframe_confirmed and
+                not bearish_reversal_pattern  # V4.0: Reject if bearish pattern present
             )
             
-            # V3.0: Prefer stocks in optimal market cap range (58% success rate)
+            # V4.0: Prefer stocks in optimal market cap range (58% success rate)
             cap_boost = 1.0
             if in_preferred_cap_range:
                 cap_boost = 1.2  # Give 20% boost to qualifying mid-caps
             
             # Final qualification logic - much stricter than previous versions
-            # V3.0: Requires essential criteria AND core criteria
+            # V4.0: Requires essential criteria AND core criteria
             qualifies = essential_criteria and core_criteria
             
             # Give extra consideration to mid-caps that "almost" qualify
@@ -668,10 +712,10 @@ class StockScreener:
     
     def _check_research_swing_criteria(self, latest: pd.Series, swing_signals: Dict, signal_strength: Dict) -> bool:
         """
-        Check for swing opportunities based on V3.0 backtest evidence
+        Check for swing opportunities based on V4.0 backtest evidence
         
         Implements statistically validated criteria from 5,000+ trade backtest analysis
-        43.2% → 72.8% win rate improvement with multiple indicator confirmation
+        with additional false signal detection from price-volume research
         """
         try:
             # Get stock symbol for sector-specific optimizations
@@ -688,17 +732,55 @@ class StockScreener:
             trend_score = signal_strength.get('trend_score', 0)
             volume_score = signal_strength.get('volume_score', 0)
             
-            # V3.0 IMPROVEMENT: Check if stock is in optimal price range 
+            # V4.0: Check for false signals using new indicators
+            bull_trap = latest.get('Bull_Trap', 0) > 0
+            bear_trap = latest.get('Bear_Trap', 0) > 0
+            false_breakout = latest.get('False_Breakout', 0) != 0
+            volume_price_divergence = latest.get('Volume_Price_Divergence', 0)
+            hft_activity = latest.get('HFT_Activity', 0) > 0.5  # High HFT activity
+            stop_hunting = latest.get('Stop_Hunting', 0) > 0
+            
+            # V4.0: Reject signals with detected false patterns
+            if bull_trap or bear_trap or false_breakout or hft_activity or stop_hunting:
+                print(f"    ❌ {symbol}: False signal detected - bull_trap={bull_trap}, bear_trap={bear_trap}, "
+                      f"false_breakout={false_breakout}, hft_activity={hft_activity}, stop_hunting={stop_hunting}")
+                return False
+            
+            # V4.0: Check for volume-price divergence
+            if volume_price_divergence == -1:
+                # Bearish divergence - reject bullish signals
+                if rsi < 50:
+                    print(f"    ❌ {symbol}: Bearish volume-price divergence detected, rejecting bullish signal")
+                    return False
+            elif volume_price_divergence == 1:
+                # Bullish divergence - reject bearish signals
+                if rsi > 50:
+                    print(f"    ❌ {symbol}: Bullish volume-price divergence detected, rejecting bearish signal")
+                    return False
+            
+            # V4.0: Check volume delta (buying vs selling pressure)
+            volume_delta = latest.get('Volume_Delta', 0)
+            if abs(volume_delta) > VOLUME_DELTA_THRESHOLD:
+                # Strong buying pressure but bearish signal
+                if volume_delta > 0 and rsi > 70:
+                    print(f"    ❌ {symbol}: Strong buying pressure conflicts with bearish signal")
+                    return False
+                # Strong selling pressure but bullish signal
+                elif volume_delta < 0 and rsi < 30:
+                    print(f"    ❌ {symbol}: Strong selling pressure conflicts with bullish signal")
+                    return False
+            
+            # V4.0 IMPROVEMENT: Check if stock is in optimal price range 
             # (2.3x higher returns in $15-80 range per backtest data)
             price_in_optimal_range = SWING_OPTIMAL_PRICE_RANGE[0] <= current_price <= SWING_OPTIMAL_PRICE_RANGE[1]
             
-            # V3.0 IMPROVEMENT: Check sector and apply sector-specific criteria
+            # V4.0 IMPROVEMENT: Check sector and apply sector-specific criteria
             # In a real implementation, this would use an actual sector lookup
             is_tech_stock = symbol in ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'TSLA', 'META', 'AMD', 'NFLX']
             is_financial_stock = symbol in ['JPM', 'BAC', 'C', 'WFC', 'GS', 'MS', 'SCHW']
             is_healthcare_stock = symbol in ['JNJ', 'PFE', 'MRNA', 'BNTX', 'UNH', 'CVS']
             
-            # V3.0: Apply sector-specific criteria
+            # V4.0: Apply sector-specific criteria
             if is_tech_stock:
                 # Tech needs stronger volume confirmation (2.0x vs standard 1.8x)
                 required_volume = TECH_SECTOR_VOLUME_MULTIPLIER
@@ -720,7 +802,7 @@ class StockScreener:
                 required_volume = SWING_VOLUME_CONFIRMATION
                 required_signal_count = 1
             
-            # V3.0: MULTI-INDICATOR APPROACH REQUIREMENTS
+            # V4.0: MULTI-INDICATOR APPROACH REQUIREMENTS
             # Backtest proved combining indicators raised win rate from 43.2% → 72.8%
             indicators_confirmed = 0
             
@@ -740,7 +822,7 @@ class StockScreener:
             if adx > 20:  # Meaningful trend strength
                 indicators_confirmed += 1
             
-            # V3.0: REWARD-RISK RATIO ASSESSMENT
+            # V4.0: REWARD-RISK RATIO ASSESSMENT
             # Backtest showed minimum 1:3 ratio needed
             potential_reward = self._calculate_take_profit(latest, level=2, trade_type='swing') - current_price
             potential_risk = current_price - self._calculate_swing_stop_loss(latest)
@@ -749,12 +831,12 @@ class StockScreener:
             else:
                 reward_risk_ratio = potential_reward / potential_risk
             
-            # V3.0: REQUIRING ENOUGH CONFIRMATIONS
+            # V4.0: REQUIRING ENOUGH CONFIRMATIONS
             # Critical: multi-factor confirmation is KEY to 72.8% win rate
             meets_confirmation_requirement = indicators_confirmed >= required_signal_count
             meets_reward_risk_requirement = reward_risk_ratio >= SWING_REWARD_RISK_RATIO
             
-            # Final qualification criteria (V3.0 - multi-factor requirement)
+            # Final qualification criteria (V4.0 - multi-factor requirement)
             qualifies = (
                 price_in_optimal_range and
                 meets_confirmation_requirement and
@@ -775,7 +857,7 @@ class StockScreener:
                    
         except Exception as e:
             print(f"Error in swing criteria check: {e}")
-            # V3.0: More strict fallback - do not accept signals with errors
+            # V4.0: More strict fallback - do not accept signals with errors
             return False
     
     def _determine_research_setup(self, latest: pd.Series, swing_signals: Dict, signal_strength: Dict) -> str:

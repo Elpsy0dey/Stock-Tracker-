@@ -79,6 +79,30 @@ TIMEFRAME_HOURLY = "1h"
 TIMEFRAME_15MIN = "15m"
 REQUIRED_TIMEFRAME_CONFIRMATION = [TIMEFRAME_DAILY, TIMEFRAME_HOURLY]  # At least these 2 timeframes must confirm
 
+# V4.0 Price-Volume Analysis Settings (Based on research paper)
+VOLUME_PRICE_DIVERGENCE_WINDOW = 5  # Days to check for volume-price divergence
+VOLUME_DELTA_THRESHOLD = 0.65  # Threshold for volume delta (buy vs sell pressure)
+BULL_BEAR_TRAP_DETECTION = True  # Enable bull/bear trap detection
+BULL_TRAP_VOLUME_THRESHOLD = 1.5  # Volume threshold for bull trap detection
+BEAR_TRAP_VOLUME_THRESHOLD = 1.3  # Volume threshold for bear trap detection
+TRAP_REVERSAL_THRESHOLD = 0.02  # Price reversal % to confirm trap
+FLICKERING_QUOTE_THRESHOLD = 3  # Number of rapid price changes to detect algo activity
+
+# V4.0 Market Depth and Liquidity Analysis
+MARKET_DEPTH_ANALYSIS = True  # Enable market depth analysis when available
+VOLUME_DEPTH_RATIO_THRESHOLD = 5.0  # Flag when volume/depth ratio exceeds this value
+ORDER_FLOW_IMBALANCE_THRESHOLD = 0.7  # Order flow buy/sell imbalance threshold (0-1)
+BID_ASK_SPREAD_WARNING = 0.01  # Flag wide spreads (>1% of price)
+LIQUIDITY_QUALITY_CHECK = True  # Check for fake liquidity and wash trades
+
+# V4.0 False Breakout Detection
+FALSE_BREAKOUT_DETECTION = True  # Enable false breakout detection
+FALSE_BREAKOUT_VOLUME_THRESHOLD = 1.2  # Minimum volume for valid breakout
+FALSE_BREAKOUT_REVERSAL_PERIOD = 3  # Days to monitor for reversal after breakout
+CANDLESTICK_REVERSAL_PATTERNS = True  # Check for bearish/bullish reversal patterns
+MULTI_TIMEFRAME_BREAKOUT_CONFIRM = True  # Require breakout confirmation on multiple timeframes
+STOP_HUNT_DETECTION = True  # Detect potential stop hunting patterns
+
 # Machine Learning Settings
 ML_LOOKBACK_PERIOD = 252  # 1 year of trading days
 ML_FEATURES_COUNT = 88    # Total technical indicators as per research
