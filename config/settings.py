@@ -32,6 +32,17 @@ SMA_LONG = 200
 EMA_SHORT = 12
 EMA_LONG = 26
 
+# Options Pinning Settings
+OPTIONS_PINNING_OI_THRESHOLD = 2.5  # OI ratio threshold for strong pinning pressure
+OPTIONS_PINNING_PROXIMITY_PCT = 0.05  # % proximity to consider strikes as potential magnets
+OPTIONS_PINNING_PATTERN_LOOKBACK = 3  # Days to look back for pinning pattern detection
+EXPIRATION_CALENDAR = {  # Sample monthly options expiration calendar
+    2023: ["01-20", "02-17", "03-17", "04-21", "05-19", "06-16", 
+          "07-21", "08-18", "09-15", "10-20", "11-17", "12-15"],
+    2024: ["01-19", "02-16", "03-15", "04-19", "05-17", "06-21", 
+          "07-19", "08-16", "09-20", "10-18", "11-15", "12-20"]
+}
+
 # Screening Criteria
 MIN_MARKET_CAP = 1e9  # $1B minimum market cap
 MIN_VOLUME = 1e6      # $1M minimum daily volume

@@ -1,38 +1,47 @@
 # -*- coding: utf-8 -*-
 #!/usr/bin/env python3
 """
-Advanced Trading Portfolio Tracker
-
-A comprehensive web-based application for portfolio tracking, technical analysis,
-stock screening, risk management, and machine learning-based trading signals.
-
-Based on academic research for high win-rate trading strategies.
+Advanced Trading Portfolio Tracker - Main Application
 """
-
-import streamlit as st
+import json
+import logging
+import os
+import sys
+from typing import Dict, List, Optional, Tuple
 import pandas as pd
 import numpy as np
-import io
+import streamlit as st
+from streamlit import session_state as ss
 from datetime import datetime, timedelta
-from typing import Dict, List
-import json
-import plotly.express as px
+import matplotlib.pyplot as plt
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import yfinance as yf
+import plotly.express as px
 import pytz
-import logging
+import io
 
-# Import our modules
-from config.settings import *
-from models.portfolio_tracker import PortfolioTracker
+# Local imports
 from models.technical_analysis import TechnicalAnalyzer
+from models.portfolio_tracker import PortfolioTracker
 from models.stock_screener import StockScreener
 from models.ml_models import MLSignalPredictor
-from utils.data_utils import load_trades_from_file, get_stock_data, get_sp500_tickers
-from utils.chart_utils import *
-from utils.startup import initialize_application
-from services.ai_service import AIService
 from services.strategy_manager import StrategyManager
+from services.ai_service import AIService
 from config.api_config import API_CONFIG
+from services.options_service import get_options_chain
+from utils.data_utils import load_trades_from_file, get_stock_data, get_sp500_tickers
+from utils.chart_utils import (
+    create_monthly_balance_chart, create_portfolio_allocation_chart,
+    create_technical_analysis_chart, create_explanatory_chart,
+    create_performance_comparison_chart, create_drawdown_chart,
+    create_risk_metrics_chart, create_correlation_heatmap,
+    create_signal_strength_chart, create_trade_timeline_chart,
+    create_risk_return_scatter, create_ml_feature_importance_chart,
+    create_combined_indicators_chart
+)
+from utils.startup import initialize_application
+from config.settings import *
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -533,7 +542,7 @@ def technical_analysis_tab():
     """, unsafe_allow_html=True)
     
     # Symbol selection - adjusted column ratios for better alignment
-    col1, col2, col3 = st.columns([2, 1, 1])
+    col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
     
     with col1:
         symbol = st.text_input("Enter Stock Symbol", value="AAPL", placeholder="e.g., AAPL, MSFT, GOOGL")
@@ -544,6 +553,10 @@ def technical_analysis_tab():
         ], index=0)  # Default to 1y
     
     with col3:
+        # Add option to show combined indicators
+        show_combined = st.checkbox("Combined Indicators", value=False, help="Show MACD Ultimate and Squeeze Momentum indicators")
+    
+    with col4:
         # Add some vertical spacing to align with the selectbox
         st.markdown("<br>", unsafe_allow_html=True)
         analyze_button = st.button("📊 Analyze", key="analyze_button")
@@ -553,459 +566,469 @@ def technical_analysis_tab():
     
     # Display results below the input controls
     if analyze_button:
-        analyze_symbol(symbol, period)
+        analyze_symbol(symbol, period, show_combined)
 
-def analyze_symbol(symbol: str, period: str):
+def analyze_symbol(symbol: str, period: str, show_combined: bool = False):
     """Analyze a symbol with technical indicators"""
     with st.spinner(f'Analyzing {symbol}...'):
-        # Get stock data
-        df = get_stock_data(symbol, period=period)
-        
-        if df.empty:
-            st.error(f"Could not fetch data for {symbol}")
-            return
-        
-        # Calculate technical indicators
-        df_with_indicators = st.session_state.technical_analyzer.calculate_all_indicators(df)
-        
-        if df_with_indicators.empty:
-            st.error("Could not calculate technical indicators")
-            return
-        
-        # Gather technical data for AI analysis and cache clearing
-        latest_data = df_with_indicators.iloc[-1]
-        technical_data = {
-            'price': latest_data['Close'],
-            'rsi': latest_data.get('RSI', 0),
-            'macd': {
-                'value': latest_data.get('MACD', 0),
-                'signal': latest_data.get('MACD_Signal', 0)
-            },
-            'stochastic': {
-                'k': latest_data.get('Stochastic_K', 0),
-                'd': latest_data.get('Stochastic_D', 0)
-            },
-            'adx': latest_data.get('ADX', 0),
-            'volume_ratio': latest_data.get('Volume_Ratio', 0),
-            'bb_position': latest_data.get('BB_Position', 0.5),
-            'atr': latest_data.get('ATR', 0),
-            'patterns': [], # Fill with detected patterns if available
-            'sma_20': latest_data.get('SMA_20', 0),
-            'sma_50': latest_data.get('SMA_50', 0),
-            'sma_200': latest_data.get('SMA_200', 0)
-        }
-        
-        # Clear the AI service cache for this specific technical data
-        from services.ai_service import AIService
-        AIService.clear_cache(technical_data)
-        
-        # Create comprehensive chart
-        tech_chart = create_technical_analysis_chart(df_with_indicators, symbol)
-        if tech_chart:
-            st.plotly_chart(tech_chart, use_container_width=True)
-        
-        # Display current signals with error handling
         try:
-            # Signal strength analysis
-            st.markdown("---")
-            st.subheader("💪 Signal Strength Analysis")
-            signal_strength = st.session_state.technical_analyzer.get_signal_strength(df_with_indicators)
+            # Get stock data
+            df = get_stock_data(symbol, period=period)
             
-            if signal_strength:
-                col1, col2, col3, col4 = st.columns(4)
-                with col1:
-                    st.metric("Overall Score", f"{signal_strength.get('overall_score', 0):.0f}/100")
-                with col2:
-                    st.metric("Momentum", f"{signal_strength.get('momentum_score', 0):.0f}/100")
-                with col3:
-                    st.metric("Trend", f"{signal_strength.get('trend_score', 0):.0f}/100")
-                with col4:
-                    st.metric("Volume", f"{signal_strength.get('volume_score', 0):.0f}/100")
-            else:
-                st.info("Insufficient data for signal strength analysis")
+            if df.empty:
+                st.error(f"Could not fetch data for {symbol}")
+                return
             
-            # Trading Signals Section
-            st.markdown("---")
-            st.subheader("🎯 Trading Signals")
-            col1, col2 = st.columns(2)
+            # Calculate technical indicators
+            df_with_indicators = st.session_state.technical_analyzer.calculate_all_indicators(df)
             
-            with col1:
-                st.markdown("**Swing Trading (1-2 weeks)**")
-                swing_signals = st.session_state.technical_analyzer.get_swing_signals(df_with_indicators)
-                
-                if swing_signals:
-                    # Group signals by type for better display
-                    bullish_signals = []
-                    bearish_signals = []
-                    setup_signals = []
-                    
-                    for signal_name, signal_value in swing_signals.items():
-                        if 'bullish' in signal_name.lower() or 'breakout_retest' in signal_name:
-                            if signal_value:
-                                bullish_signals.append(signal_name.replace('_', ' ').title())
-                        elif 'bearish' in signal_name.lower():
-                            if signal_value:
-                                bearish_signals.append(signal_name.replace('_', ' ').title())
-                        else:
-                            if signal_value:
-                                setup_signals.append(signal_name.replace('_', ' ').title())
-                    
-                    # Display active signals
-                    if bullish_signals:
-                        st.success("🟢 **Bullish Signals:**")
-                        for signal in bullish_signals:
-                            st.write(f"✅ {signal}")
-                    
-                    if bearish_signals:
-                        st.error("🔴 **Bearish Signals:**")
-                        for signal in bearish_signals:
-                            st.write(f"✅ {signal}")
-                    
-                    if setup_signals:
-                        st.warning("🟡 **Setup Signals:**")
-                        for signal in setup_signals:
-                            st.write(f"✅ {signal}")
-                    
-                    if not (bullish_signals or bearish_signals or setup_signals):
-                        st.info("❌ No active swing signals detected")
-                        # Show all signals with status
-                        for signal_name, signal_value in swing_signals.items():
-                            emoji = "✅" if signal_value else "❌"
-                            st.write(f"{emoji} {signal_name.replace('_', ' ').title()}")
-                else:
-                    st.info("Insufficient data for swing signals")
+            if df_with_indicators.empty:
+                st.error("Could not calculate technical indicators")
+                return
             
-            with col2:
-                st.markdown("**Breakout Trading (1-6 months)**")
-                breakout_signals = st.session_state.technical_analyzer.get_breakout_signals(df_with_indicators)
-                
-                if breakout_signals:
-                    # Group breakout signals by type
-                    confirmed_breakouts = []
-                    potential_breakouts = []
-                    
-                    for signal_name, signal_value in breakout_signals.items():
-                        if signal_value:
-                            if 'confirmed' in signal_name.lower() or 'breakout' in signal_name.lower():
-                                confirmed_breakouts.append(signal_name.replace('_', ' ').title())
-                            else:
-                                potential_breakouts.append(signal_name.replace('_', ' ').title())
-                    
-                    if confirmed_breakouts:
-                        st.success("🚀 **Confirmed Breakout Signals:**")
-                        for signal in confirmed_breakouts:
-                            st.write(f"✅ {signal}")
-                    elif potential_breakouts:
-                        st.warning("🟡 **Potential Breakout Signals:**")
-                        for signal in potential_breakouts:
-                            st.write(f"✅ {signal}")
-                    else:
-                        st.info("❌ No active breakout signals detected")
-                        # Show all breakout signals with status
-                    for signal_name, signal_value in breakout_signals.items():
-                        emoji = "✅" if signal_value else "❌"
-                        st.write(f"{emoji} {signal_name.replace('_', ' ').title()}")
-                else:
-                    st.info("Insufficient data for breakout signals")
-            
-            # Pattern Recognition
-            st.markdown("---")
-            st.subheader("📊 Pattern Recognition")
-            latest = df_with_indicators.iloc[-1]
-            
-            # Create columns for different pattern types
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                st.markdown("**Reversal Patterns**")
-                if latest.get('Double_Top', False):
-                    st.error("🔴 Double Top")
-                if latest.get('Double_Bottom', False):
-                    st.success("🟢 Double Bottom")
-                if latest.get('Head_And_Shoulders', False):
-                    st.error("🔴 Head and Shoulders")
-                if latest.get('Inverse_Head_And_Shoulders', False):
-                    st.success("🟢 Inverse Head and Shoulders")
-            
-            with col2:
-                st.markdown("**Continuation Patterns**")
-                if latest.get('Ascending_Triangle', False):
-                    st.success("🟢 Ascending Triangle")
-                if latest.get('Descending_Triangle', False):
-                    st.error("🔴 Descending Triangle")
-                if latest.get('Symmetrical_Triangle', False):
-                    st.warning("🟡 Symmetrical Triangle")
-                if latest.get('Rectangle', False):
-                    st.info("⚪ Rectangle")
-            
-            with col3:
-                st.markdown("**Candlestick Patterns**")
-                if latest.get('Doji', False):
-                    st.warning("🟡 Doji")
-                if latest.get('Hammer', False):
-                    st.success("🟢 Hammer")
-                if latest.get('Shooting_Star', False):
-                    st.error("🔴 Shooting Star")
-                if latest.get('Engulfing', False):
-                    st.warning("🟡 Engulfing")
-            
-            # V4.0 Price-Volume Analysis Section
-            st.markdown("---")
-            st.subheader("⚠️ Price-Volume Analysis & Trap Risk")
-            
-            # Extract V4.0 indicators
-            v4_indicators = {
-                'Bull_Trap': latest.get('Bull_Trap', 0),
-                'Bear_Trap': latest.get('Bear_Trap', 0),
-                'False_Breakout': latest.get('False_Breakout', 0),
-                'Volume_Price_Divergence': latest.get('Volume_Price_Divergence', 0),
-                'HFT_Activity': latest.get('HFT_Activity', 0),
-                'Stop_Hunting': latest.get('Stop_Hunting', 0),
-                'Volume_Delta': latest.get('Volume_Delta', 0)
-            }
-            
-            # Create a result dictionary with the necessary fields for trap risk calculation
-            result_for_risk = {**v4_indicators, 'Close': latest['Close']}
-            if 'SMA_20' in latest:
-                result_for_risk['SMA_20'] = latest['SMA_20']
-            
-            # Calculate trap risk
-            trap_risk = get_trap_risk_indicator(result_for_risk)
-            
-            # Display trap risk prominently
-            col1, col2 = st.columns([1, 3])
-            with col1:
-                st.markdown("### Trap Risk:")
-                risk_color = "green" if "Low" in trap_risk else "orange" if "Medium" in trap_risk else "red" if "High" in trap_risk else "gray"
-                st.markdown(f"<h2 style='color: {risk_color};'>{trap_risk}</h2>", unsafe_allow_html=True)
-            
-            with col2:
-                st.markdown("### Risk Factors:")
-                
-                # Display active risk factors
-                risk_factors = []
-                
-                if v4_indicators['Bull_Trap'] > 0:
-                    risk_factors.append("🔴 Bull Trap Detected")
-                if v4_indicators['Bear_Trap'] > 0:
-                    risk_factors.append("🔴 Bear Trap Detected")
-                if v4_indicators['False_Breakout'] != 0:
-                    risk_factors.append("🔴 False Breakout Pattern")
-                if v4_indicators['Volume_Price_Divergence'] != 0:
-                    divergence_type = "Bearish" if v4_indicators['Volume_Price_Divergence'] < 0 else "Bullish"
-                    risk_factors.append(f"🟡 {divergence_type} Volume-Price Divergence")
-                if v4_indicators['HFT_Activity'] > 0.7:
-                    risk_factors.append("🔴 High HFT Activity")
-                elif v4_indicators['HFT_Activity'] > 0.3:
-                    risk_factors.append("🟡 Moderate HFT Activity")
-                if v4_indicators['Stop_Hunting'] > 0:
-                    risk_factors.append("🔴 Stop Hunting Pattern")
-                
-                # Calculate volume delta significance
-                volume_delta = v4_indicators['Volume_Delta']
-                if abs(volume_delta) > 0.5:
-                    delta_type = "Buying" if volume_delta > 0 else "Selling"
-                    risk_factors.append(f"🟡 Strong {delta_type} Pressure ({volume_delta:.2f})")
-                
-                if risk_factors:
-                    for factor in risk_factors:
-                        st.markdown(factor)
-                else:
-                    st.markdown("✅ No significant risk factors detected")
-            
-            # Add explanation of trap risk indicators
-            with st.expander("ℹ️ About Trap Risk Indicators"):
-                st.markdown("""
-                **Price-Volume Analysis** helps detect potential false signals and market manipulation:
-                
-                - **Bull/Bear Traps**: False breakouts designed to trap traders in the wrong direction
-                - **Volume-Price Divergence**: When price movement isn't supported by corresponding volume
-                - **HFT Activity**: High-frequency trading creating misleading price signals
-                - **Stop Hunting**: Large players deliberately triggering retail stop losses
-                - **False Breakout Patterns**: Breakouts that fail to follow through
-                
-                **Trap Risk Levels:**
-                - 🟢 **Low**: Low probability of false signal/trap
-                - 🟡 **Medium**: Some risk factors present - use caution
-                - 🔴 **High**: Multiple risk factors detected - high chance of false signal
-                - ⚫ **Unknown**: Insufficient data to assess trap risk
-                """)
-            
-            # NEW: Add Pattern vs Risk Analysis
-            st.markdown("---")
-            st.subheader("🔄 Pattern vs Risk Analysis")
-            
-            # Remove the expander from here
-            
-            # Identify active technical patterns
-            active_patterns = []
-            
-            # Check for bullish patterns
-            if latest.get('RSI', 0) < 40 and latest.get('Stoch_K', 0) < 30:
-                active_patterns.append(("Oversold Condition", "Bullish"))
-            if latest.get('MACD', 0) > latest.get('MACD_Signal', 0):
-                active_patterns.append(("MACD Bullish Crossover", "Bullish"))
-            if latest.get('Hammer', False):
-                active_patterns.append(("Hammer Pattern", "Bullish"))
-            if latest.get('Inverse_Head_And_Shoulders', False):
-                active_patterns.append(("Inverse Head & Shoulders", "Bullish"))
-            if latest.get('Double_Bottom', False):
-                active_patterns.append(("Double Bottom", "Bullish"))
-            if latest.get('Ascending_Triangle', False):
-                active_patterns.append(("Ascending Triangle", "Bullish"))
-            if latest.get('Golden_Cross', False) or (latest.get('SMA_50', 0) > latest.get('SMA_200', 0) and df_with_indicators['SMA_50'].iloc[-2] <= df_with_indicators['SMA_200'].iloc[-2]):
-                active_patterns.append(("Golden Cross", "Bullish"))
-                
-            # Check for bearish patterns
-            if latest.get('RSI', 0) > 60 and latest.get('Stoch_K', 0) > 70:
-                active_patterns.append(("Overbought Condition", "Bearish"))
-            if latest.get('MACD', 0) < latest.get('MACD_Signal', 0):
-                active_patterns.append(("MACD Bearish Crossover", "Bearish"))
-            if latest.get('Shooting_Star', False):
-                active_patterns.append(("Shooting Star", "Bearish"))
-            if latest.get('Head_And_Shoulders', False):
-                active_patterns.append(("Head & Shoulders", "Bearish"))
-            if latest.get('Double_Top', False):
-                active_patterns.append(("Double Top", "Bearish"))
-            if latest.get('Descending_Triangle', False):
-                active_patterns.append(("Descending Triangle", "Bearish"))
-            if latest.get('Death_Cross', False) or (latest.get('SMA_50', 0) < latest.get('SMA_200', 0) and df_with_indicators['SMA_50'].iloc[-2] >= df_with_indicators['SMA_200'].iloc[-2]):
-                active_patterns.append(("Death Cross", "Bearish"))
-            
-            # Determine pattern direction
-            if active_patterns:
-                bullish_count = sum(1 for _, direction in active_patterns if direction == "Bullish")
-                bearish_count = sum(1 for _, direction in active_patterns if direction == "Bearish")
-                
-                if bullish_count > bearish_count:
-                    pattern_direction = "Bullish"
-                elif bearish_count > bullish_count:
-                    pattern_direction = "Bearish"
-                else:
-                    pattern_direction = "Mixed"
-            else:
-                pattern_direction = "Neutral"
-            
-            # Determine risk direction
-            bull_trap = v4_indicators['Bull_Trap'] > 0
-            bear_trap = v4_indicators['Bear_Trap'] > 0
-            false_breakout = v4_indicators['False_Breakout'] != 0
-            volume_price_divergence = v4_indicators['Volume_Price_Divergence']
-            
-            if bull_trap:
-                risk_direction = "Bearish"  # Bull trap is bearish (false bullish signal)
-            elif bear_trap:
-                risk_direction = "Bullish"  # Bear trap is bullish (false bearish signal)
-            elif false_breakout != 0:
-                # Determine direction of false breakout
-                if false_breakout > 0:
-                    risk_direction = "Bearish"  # False upward breakout
-                else:
-                    risk_direction = "Bullish"  # False downward breakout
-            elif volume_price_divergence != 0:
-                if volume_price_divergence > 0:
-                    risk_direction = "Bearish"  # Bullish price with weak volume is bearish
-                else:
-                    risk_direction = "Bullish"  # Bearish price with weak volume is bullish
-            else:
-                risk_direction = "Neutral"
-            
-            # Check for pattern-risk alignment
-            if pattern_direction == "Neutral" or risk_direction == "Neutral":
-                alignment = "Neutral"
-            elif pattern_direction == risk_direction:
-                alignment = "Aligned"
-            else:
-                alignment = "Conflicting"
-            
-            # Display pattern-risk alignment
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.markdown("### Technical Pattern Direction:")
-                pattern_color = "green" if pattern_direction == "Bullish" else "red" if pattern_direction == "Bearish" else "gray"
-                st.markdown(f"<h3 style='color: {pattern_color};'>{pattern_direction}</h3>", unsafe_allow_html=True)
-                
-                if active_patterns:
-                    st.markdown("**Active Patterns:**")
-                    for pattern, direction in active_patterns:
-                        direction_emoji = "🟢" if direction == "Bullish" else "🔴" if direction == "Bearish" else "⚪"
-                        st.markdown(f"{direction_emoji} {pattern}")
-                else:
-                    st.markdown("No clear technical patterns detected")
-            
-            with col2:
-                st.markdown("### Risk Factor Direction:")
-                risk_color = "green" if risk_direction == "Bullish" else "red" if risk_direction == "Bearish" else "gray"
-                st.markdown(f"<h3 style='color: {risk_color};'>{risk_direction}</h3>", unsafe_allow_html=True)
-                
-                # Display alignment status with icon
-                alignment_emoji = "✅" if alignment == "Aligned" else "⚠️" if alignment == "Conflicting" else "⚪"
-                alignment_color = "green" if alignment == "Aligned" else "orange" if alignment == "Conflicting" else "gray"
-                
-                st.markdown(f"### Signal-Risk Alignment: <span style='color: {alignment_color};'>{alignment_emoji} {alignment}</span>", unsafe_allow_html=True)
-                
-                if alignment == "Conflicting":
-                    st.markdown("""
-                    ⚠️ **Warning:** Technical patterns and risk factors are showing conflicting signals.
-                    Consider waiting for confirmation or reducing position size.
-                    """)
-                elif alignment == "Aligned":
-                    st.markdown("""
-                    ✅ **Confirmation:** Technical patterns and risk analysis are aligned.
-                    This increases confidence in the signal direction.
-                    """)
-            
-            # Add the expander at the bottom of the section
-            with st.expander("ℹ️ About Pattern vs Risk Analysis"):
-                st.markdown("""
-                **Pattern vs Risk Analysis** compares traditional technical patterns with advanced risk factors:
-                
-                - **Signal Alignment**: When technical patterns and risk factors point in the same direction, increasing confidence
-                - **Signal Conflict**: When technical patterns and risk factors contradict each other, suggesting caution
-                - **Pattern Direction**: Determined by analyzing RSI, MACD, chart patterns, and moving averages
-                - **Risk Direction**: Determined by analyzing traps, false breakouts, and volume-price relationships
-                
-                **Alignment Status:**
-                - ✅ **Aligned**: Technical patterns and risk factors point in the same direction (high confidence)
-                - ⚠️ **Conflicting**: Technical patterns and risk factors contradict each other (use caution)
-                - ⚪ **Neutral**: Either patterns or risk factors don't show a clear direction
-                """)
-            
-            # Get latest data for AI analysis
-            latest = df_with_indicators.iloc[-1]
+            # Gather technical data for AI analysis and cache clearing
+            latest_data = df_with_indicators.iloc[-1]
             technical_data = {
-                'price': latest['Close'],
-                'rsi': latest['RSI'],
+                'price': latest_data['Close'],
+                'rsi': latest_data.get('RSI', 0),
                 'macd': {
-                    'value': latest['MACD'],
-                    'signal': latest['MACD_Signal']
+                    'value': latest_data.get('MACD', 0),
+                    'signal': latest_data.get('MACD_Signal', 0)
                 },
                 'stochastic': {
-                    'k': latest['Stoch_K'],
-                    'd': latest['Stoch_D']
+                    'k': latest_data.get('Stochastic_K', 0),
+                    'd': latest_data.get('Stochastic_D', 0)
                 },
-                'adx': latest['ADX'],
-                'volume_ratio': latest['Volume'] / latest['Volume_SMA'] if 'Volume_SMA' in latest else 1.0,
-                'bb_position': latest['BB_Position'],
-                'atr': latest['ATR'],
-                'patterns': [pattern for pattern, value in latest.items() if pattern.endswith('_Pattern') and value],
-                'sma_20': latest['SMA_20'],
-                'sma_50': latest['SMA_50'],
-                'sma_200': latest['SMA_200']
+                'adx': latest_data.get('ADX', 0),
+                'volume_ratio': latest_data.get('Volume_Ratio', 0),
+                'bb_position': latest_data.get('BB_Position', 0.5),
+                'atr': latest_data.get('ATR', 0),
+                'patterns': [], # Fill with detected patterns if available
+                'sma_20': latest_data.get('SMA_20', 0),
+                'sma_50': latest_data.get('SMA_50', 0),
+                'sma_200': latest_data.get('SMA_200', 0)
             }
             
-            # Get AI suggestions
-            ai_suggestions = AIService.generate_trading_suggestions(technical_data)
+            # Clear the AI service cache for this specific technical data
+            AIService.clear_cache(technical_data)
             
-            # Display AI suggestions in a new section
-            st.markdown("---")
-            st.subheader("🤖 AI Trading Analysis")
+            # Show either the combined indicators chart or the standard technical chart
+            if show_combined:
+                combined_chart = create_combined_indicators_chart(df_with_indicators, symbol)
+                if combined_chart:
+                    st.plotly_chart(combined_chart, use_container_width=True)
+            else:
+                # Create comprehensive chart
+                tech_chart = create_technical_analysis_chart(df_with_indicators, symbol)
+                if tech_chart:
+                    st.plotly_chart(tech_chart, use_container_width=True)
             
-            # Add a refresh button specifically for AI analysis
-            refresh_ai_col1, refresh_ai_col2 = st.columns([5, 1])
-            with refresh_ai_col2:
-                refresh_ai_button = st.button("🔄 Refresh AI", key="refresh_ai_button")
+            # Display current signals with error handling
+            try:
+                # Signal strength analysis
+                st.markdown("---")
+                st.subheader("💪 Signal Strength Analysis")
+                signal_strength = st.session_state.technical_analyzer.get_signal_strength(df_with_indicators)
+                
+                if signal_strength:
+                    col1, col2, col3, col4 = st.columns(4)
+                    with col1:
+                        st.metric("Overall Score", f"{signal_strength.get('overall_score', 0):.0f}/100")
+                    with col2:
+                        st.metric("Momentum", f"{signal_strength.get('momentum_score', 0):.0f}/100")
+                    with col3:
+                        st.metric("Trend", f"{signal_strength.get('trend_score', 0):.0f}/100")
+                    with col4:
+                        st.metric("Volume", f"{signal_strength.get('volume_score', 0):.0f}/100")
+                else:
+                    st.info("Insufficient data for signal strength analysis")
+                
+                # Trading Signals Section
+                st.markdown("---")
+                st.subheader("🎯 Trading Signals")
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.markdown("**Swing Trading (1-2 weeks)**")
+                    swing_signals = st.session_state.technical_analyzer.get_swing_signals(df_with_indicators)
+                    
+                    if swing_signals:
+                        # Group signals by type for better display
+                        bullish_signals = []
+                        bearish_signals = []
+                        setup_signals = []
+                        
+                        for signal_name, signal_value in swing_signals.items():
+                            if 'bullish' in signal_name.lower() or 'breakout_retest' in signal_name:
+                                if signal_value:
+                                    bullish_signals.append(signal_name.replace('_', ' ').title())
+                            elif 'bearish' in signal_name.lower():
+                                if signal_value:
+                                    bearish_signals.append(signal_name.replace('_', ' ').title())
+                            else:
+                                if signal_value:
+                                    setup_signals.append(signal_name.replace('_', ' ').title())
+                        
+                        # Display active signals
+                        if bullish_signals:
+                            st.success("🟢 **Bullish Signals:**")
+                            for signal in bullish_signals:
+                                st.write(f"✅ {signal}")
+                        
+                        if bearish_signals:
+                            st.error("🔴 **Bearish Signals:**")
+                            for signal in bearish_signals:
+                                st.write(f"✅ {signal}")
+                        
+                        if setup_signals:
+                            st.warning("🟡 **Setup Signals:**")
+                            for signal in setup_signals:
+                                st.write(f"✅ {signal}")
+                        
+                        if not (bullish_signals or bearish_signals or setup_signals):
+                            st.info("❌ No active swing signals detected")
+                            # Show all signals with status
+                            for signal_name, signal_value in swing_signals.items():
+                                emoji = "✅" if signal_value else "❌"
+                                st.write(f"{emoji} {signal_name.replace('_', ' ').title()}")
+                    else:
+                        st.info("Insufficient data for swing signals")
+                
+                with col2:
+                    st.markdown("**Breakout Trading (1-6 months)**")
+                    breakout_signals = st.session_state.technical_analyzer.get_breakout_signals(df_with_indicators)
+                    
+                    if breakout_signals:
+                        # Group signals by type
+                        bullish_signals = []
+                        bearish_signals = []
+                        
+                        for signal_name, signal_value in breakout_signals.items():
+                            if 'bullish' in signal_name.lower():
+                                if signal_value:
+                                    bullish_signals.append(signal_name.replace('_', ' ').title())
+                            elif 'bearish' in signal_name.lower():
+                                if signal_value:
+                                    bearish_signals.append(signal_name.replace('_', ' ').title())
+                        
+                        # Display active signals
+                        if bullish_signals:
+                            st.success("🟢 **Bullish Breakout Signals:**")
+                            for signal in bullish_signals:
+                                st.write(f"✅ {signal}")
+                        
+                        if bearish_signals:
+                            st.error("🔴 **Bearish Breakdown Signals:**")
+                            for signal in bearish_signals:
+                                st.write(f"✅ {signal}")
+                        
+                        if not (bullish_signals or bearish_signals):
+                            st.info("❌ No active breakout signals detected")
+                            # Show sample signals with status
+                            for signal_name, signal_value in list(breakout_signals.items())[:5]:
+                                emoji = "✅" if signal_value else "❌"
+                                st.write(f"{emoji} {signal_name.replace('_', ' ').title()}")
+                    else:
+                        st.info("Insufficient data for breakout signals")
+                
+                # Risk Factor Analysis - simplified
+                st.markdown("---")
+                st.subheader("⚠️ Risk Factor Analysis")
+                
+                # Collect risk factors
+                risk_factors = []
+                
+                
+                if 'False_Breakout' in df_with_indicators.columns and df_with_indicators['False_Breakout'].iloc[-1]:
+                    risk_factors.append("🔴 False Breakout Pattern")
+                
+                if 'Volume_Price_Divergence' in df_with_indicators.columns and df_with_indicators['Volume_Price_Divergence'].iloc[-1] < -0.5:
+                    risk_factors.append("🔴 Volume-Price Divergence")
+                
+                if 'Stop_Hunting' in df_with_indicators.columns and df_with_indicators['Stop_Hunting'].iloc[-1]:
+                    risk_factors.append("🔴 Stop Hunting Pattern")
+                
+                if 'HFT_Activity' in df_with_indicators.columns and df_with_indicators['HFT_Activity'].iloc[-1] > 0.7:
+                    risk_factors.append("🔴 High HFT Activity")
+                
+                # Display risk factors
+                if risk_factors:
+                    st.warning("**Active Risk Factors:**")
+                    for risk in risk_factors:
+                        st.write(risk)
+                else:
+                    st.success("✅ No significant risk factors detected")
+                
+                with st.expander("ℹ️ About Risk Factors"):
+                    st.markdown("""
+                    **Risk Factor Analysis** identifies potential warning signs that may impact trading decisions:
+                    
+                    - **Volume-Price Divergence**: When price moves in one direction but volume suggests the opposite
+                    - **False Breakout Patterns**: Breakouts that fail to follow through
+                    - **Stop Hunting**: Unusual price movements that trigger stop losses before reversing
+                    - **HFT Activity**: Signs of high frequency trading potentially causing price distortions
+                    
+                    These factors are designed to help protect against losses and identify potential manipulation.
+                    """)
+                
+                # Options Pinning Analysis Section
+                st.markdown("---")
+                st.subheader("🎯 Options Pinning Analysis")
+                
+                # Get the current date to check for upcoming expirations
+                today = datetime.now()
+                current_year = today.year
+                
+                # Get real options data instead of sample data
+                options_data = get_options_chain(symbol)
+                
+                # Create columns for pinning analysis
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.markdown("##### Strike Price Magnets")
+                    
+                    if options_data:
+                        # Use real option strikes and OI from API
+                        current_price = options_data["current_price"]
+                        option_strikes = options_data["strikes"] 
+                        option_oi = options_data["open_interest"]
+                        
+                        # Run options pinning analysis with real data
+                        pinning_analysis = st.session_state.technical_analyzer.analyze_options_pinning(
+                            df_with_indicators['Close'],
+                            option_strikes=option_strikes,
+                            option_oi=option_oi
+                        )
+                        
+                        # Check for pinning pattern
+                        if pinning_analysis['nearest_strike']:
+                            has_pinning_pattern = st.session_state.technical_analyzer.detect_pinning_pattern(
+                                df_with_indicators['Close'], 
+                                pinning_analysis['nearest_strike']
+                            )
+                        else:
+                            has_pinning_pattern = False
+                        
+                        # Display nearest strike
+                        nearest_strike = pinning_analysis['nearest_strike']
+                        if nearest_strike:
+                            distance = pinning_analysis['distance_to_strike']
+                            distance_pct = (distance / current_price) * 100
+                            
+                            # Color based on proximity
+                            if distance_pct < 0.5:  # Within 0.5%
+                                st.success(f"🎯 **Nearest Strike:** ${nearest_strike:.2f} (±{distance_pct:.2f}%)")
+                            elif distance_pct < 1.0:  # Within 1%
+                                st.info(f"🎯 **Nearest Strike:** ${nearest_strike:.2f} (±{distance_pct:.2f}%)")
+                            else:
+                                st.markdown(f"🎯 **Nearest Strike:** ${nearest_strike:.2f} (±{distance_pct:.2f}%)")
+                        
+                        # Display top open interest strikes as potential magnets
+                        if pinning_analysis['potential_magnets']:
+                            st.markdown("**Potential Price Magnets:**")
+                            for strike, oi in pinning_analysis['potential_magnets']:
+                                mag_distance_pct = (abs(strike - current_price) / current_price) * 100
+                                # Color based on proximity and OI
+                                if mag_distance_pct < 1.0 and oi > 3000:  # Close with high OI
+                                    st.success(f"✨ ${strike:.2f} - OI: {oi:,}")
+                                elif mag_distance_pct < 2.0 or oi > 4000:  # Either close or very high OI
+                                    st.info(f"✨ ${strike:.2f} - OI: {oi:,}")
+                                else:
+                                    st.markdown(f"✨ ${strike:.2f} - OI: {oi:,}")
+                        else:
+                            st.markdown("No significant price magnets detected")
+                    else:
+                        # Fall back to sample data if options API fails
+                        st.warning("Could not fetch options data. Using sample data instead.")
+                        
+                        # Generate sample option strike prices around current price
+                        # In a real implementation, you'd fetch actual option chain data
+                        current_price = df_with_indicators['Close'].iloc[-1]
+                        
+                        # Create sample strikes (in a real app, would come from actual options data)
+                        # Generate strikes $5 apart for stocks under $100, $10 apart for stocks over $100
+                        strike_interval = 5 if current_price < 100 else 10
+                        round_to_nearest = lambda x, base=strike_interval: base * round(x/base)
+                        current_price_rounded = round_to_nearest(current_price)
+                        sample_strikes = [current_price_rounded + (i * strike_interval) for i in range(-5, 6)]
+                        
+                        # Generate sample open interest (higher for strikes closer to current price)
+                        # In a real app, this would be actual OI data from an options API
+                        sample_oi = {strike: max(1000, int(5000 * (1 - (abs(strike - current_price) / (current_price * 0.1))))) 
+                                    for strike in sample_strikes}
+                        
+                        # Run options pinning analysis
+                        pinning_analysis = st.session_state.technical_analyzer.analyze_options_pinning(
+                            df_with_indicators['Close'],
+                            option_strikes=sample_strikes,
+                            option_oi=sample_oi
+                        )
+                        
+                        # Check for pinning pattern
+                        if pinning_analysis['nearest_strike']:
+                            has_pinning_pattern = st.session_state.technical_analyzer.detect_pinning_pattern(
+                                df_with_indicators['Close'], 
+                                pinning_analysis['nearest_strike']
+                            )
+                        else:
+                            has_pinning_pattern = False
+                        
+                        # Display nearest strike
+                        nearest_strike = pinning_analysis['nearest_strike']
+                        if nearest_strike:
+                            distance = pinning_analysis['distance_to_strike']
+                            distance_pct = (distance / current_price) * 100
+                            
+                            # Color based on proximity
+                            if distance_pct < 0.5:  # Within 0.5%
+                                st.success(f"🎯 **Nearest Strike:** ${nearest_strike:.2f} (±{distance_pct:.2f}%)")
+                            elif distance_pct < 1.0:  # Within 1%
+                                st.info(f"🎯 **Nearest Strike:** ${nearest_strike:.2f} (±{distance_pct:.2f}%)")
+                            else:
+                                st.markdown(f"🎯 **Nearest Strike:** ${nearest_strike:.2f} (±{distance_pct:.2f}%)")
+                        
+                        # Display top open interest strikes as potential magnets
+                        if pinning_analysis['potential_magnets']:
+                            st.markdown("**Potential Price Magnets:**")
+                            for strike, oi in pinning_analysis['potential_magnets']:
+                                mag_distance_pct = (abs(strike - current_price) / current_price) * 100
+                                # Color based on proximity and OI
+                                if mag_distance_pct < 1.0 and oi > 3000:  # Close with high OI
+                                    st.success(f"✨ ${strike:.2f} - OI: {oi:,}")
+                                elif mag_distance_pct < 2.0 or oi > 4000:  # Either close or very high OI
+                                    st.info(f"✨ ${strike:.2f} - OI: {oi:,}")
+                                else:
+                                    st.markdown(f"✨ ${strike:.2f} - OI: {oi:,}")
+                        else:
+                            st.markdown("No significant price magnets detected")
+                
+                with col2:
+                    st.markdown("##### Expiration Analysis")
+                    
+                    if options_data:
+                        # Use real expiration date from options data
+                        expiry_date_str = options_data["expiry_date"]
+                        days_to_expiry = options_data["days_to_expiry"]
+                        is_monthly = options_data["is_monthly"]
+                        
+                        # Display expiration information
+                        expiry_date = datetime.strptime(expiry_date_str, "%Y-%m-%d")
+                        near_expiration = days_to_expiry <= 5
+                        
+                        # Format the expiration date nicely
+                        formatted_date = expiry_date.strftime("%B %d")
+                        
+                        if near_expiration:
+                            st.warning(f"⚠️ **Expiration Approaching:** {formatted_date} ({days_to_expiry} days)")
+                            st.markdown("*Increased pinning risk due to gamma acceleration*")
+                        else:
+                            if is_monthly:
+                                st.info(f"📅 Next Monthly Expiration: {formatted_date} ({days_to_expiry} days)")
+                            else:
+                                st.info(f"📅 Next Expiration: {formatted_date} ({days_to_expiry} days)")
+                    else:
+                        # Fall back to calendar-based estimate
+                        # Check if we're within a week of monthly options expiration
+                        expiration_dates = []
+                        if current_year in EXPIRATION_CALENDAR:
+                            expiration_dates = [datetime.strptime(f"{current_year}-{date}", "%Y-%m-%d") for date in EXPIRATION_CALENDAR[current_year]]
+                        elif current_year-1 in EXPIRATION_CALENDAR:
+                            # Fallback to previous year's calendar as a pattern
+                            expiration_dates = [datetime.strptime(f"{current_year}-{date}", "%Y-%m-%d") for date in EXPIRATION_CALENDAR[current_year-1]]
+                        
+                        # Find closest upcoming expiration
+                        upcoming_expirations = [d for d in expiration_dates if d >= today]
+                        closest_expiration = min(upcoming_expirations, default=None) if upcoming_expirations else None
+                        days_to_expiration = (closest_expiration - today).days if closest_expiration else None
+                        near_expiration = days_to_expiration is not None and days_to_expiration <= 5
+                        
+                        # Display expiration information
+                        if closest_expiration:
+                            if near_expiration:
+                                st.warning(f"⚠️ **Expiration Approaching:** {closest_expiration.strftime('%B %d')} ({days_to_expiration} days)")
+                                st.markdown("*Increased pinning risk due to gamma acceleration*")
+                            else:
+                                st.info(f"📅 Next Expiration: {closest_expiration.strftime('%B %d')} ({days_to_expiration} days)")
+                        else:
+                            st.markdown("No expiration data available")
+                    
+                    # Pinning pressure indicator
+                    st.markdown("**Pinning Pressure:**")
+                    pressure = pinning_analysis.get('pinning_pressure', 0)
+                    
+                    # Create a pinning pressure gauge
+                    if pressure > OPTIONS_PINNING_OI_THRESHOLD:  # High pressure
+                        pressure_color = "#FF4B4B"  # Red
+                        pressure_level = "High"
+                    elif pressure > 1.5:  # Medium pressure
+                        pressure_color = "#FFA726"  # Orange
+                        pressure_level = "Medium"
+                    else:  # Low pressure
+                        pressure_color = "#4CAF50"  # Green
+                        pressure_level = "Low"
+                    
+                    # Display the pressure level
+                    st.markdown(f"<div style='background: linear-gradient(to right, {pressure_color} {min(pressure * 10, 100)}%, #e0e0e0 {min(pressure * 10, 100)}%); height: 20px; border-radius: 5px;'></div>", unsafe_allow_html=True)
+                    st.markdown(f"**{pressure_level}** ({pressure:.1f}x average)")
+                    
+                    # Pattern detection
+                    if has_pinning_pattern:
+                        st.success("✅ **Pinning Pattern Detected**")
+                        st.markdown("*Price is oscillating around strike with decreasing amplitude*")
+                    else:
+                        st.markdown("❌ No pinning pattern detected")
+                
+                # Add disclaimer and educational information
+                with st.expander("ℹ️ About Options Pinning Analysis"):
+                    st.markdown("""
+                    **Options Pinning Analysis** helps identify potential price magnets due to market maker hedging activity:
+                    
+                    - **Strike Price Magnets**: Option strikes with high open interest can act as price attractors near expiration
+                    - **Pinning Pressure**: Calculated based on the concentration of open interest at nearby strikes
+                    - **Expiration Effects**: Pinning is strongest during expiration week (especially monthly expirations)
+                    - **Pinning Pattern**: Price oscillation around a strike with decreasing amplitude indicates active hedging
+                    
+                    **Usage in Trading:**
+                    - Identify potential support/resistance levels based on option open interest
+                    - Be cautious about setting profit targets just beyond major strikes during expiration week
+                    - Consider the potential for price acceleration when breaking away from a pinning strike
+                    - Monthly expirations typically show stronger pinning effects than weekly expirations
+                    
+                    *Note: This analysis uses real options open interest data when available, but may fall back to estimates if data cannot be retrieved.*
+                    """)
+                
+                # Get AI suggestions
+                st.markdown("---")
+                st.subheader("🤖 AI Trading Analysis")
+                
+                # Add a refresh button specifically for AI analysis
+                refresh_ai_col1, refresh_ai_col2 = st.columns([5, 1])
+                with refresh_ai_col2:
+                    refresh_ai_button = st.button("🔄 Refresh AI", key="refresh_ai_button")
+                
+                # Get latest data for AI analysis
+                latest = df_with_indicators.iloc[-1]
+                technical_data = {
+                    'price': latest['Close'],
+                    'rsi': latest['RSI'],
+                    'macd': {
+                        'value': latest['MACD'],
+                        'signal': latest['MACD_Signal']
+                    },
+                    'stochastic': {
+                        'k': latest['Stoch_K'],
+                        'd': latest['Stoch_D']
+                    },
+                    'adx': latest['ADX'],
+                    'volume_ratio': latest['Volume'] / latest['Volume_SMA'] if 'Volume_SMA' in latest else 1.0,
+                    'bb_position': latest['BB_Position'],
+                    'atr': latest['ATR'],
+                    'patterns': [pattern for pattern, value in latest.items() if pattern.endswith('_Pattern') and value],
+                    'sma_20': latest['SMA_20'],
+                    'sma_50': latest['SMA_50'],
+                    'sma_200': latest['SMA_200']
+                }
                 
                 if refresh_ai_button:
                     # Clear the AI service cache for this technical data
@@ -1013,128 +1036,135 @@ def analyze_symbol(symbol: str, period: str):
                     # Regenerate the AI suggestions
                     ai_suggestions = AIService.generate_trading_suggestions(technical_data)
                     st.success("AI analysis refreshed!")
-            
-            # Display the AI suggestions
-            st.markdown(ai_suggestions)
-            
-            # Advanced Key Indicators
-            st.markdown("---")
-            st.subheader("📈 Advanced Key Indicators")
-            
-            # Get the most recent data point
-            latest = df_with_indicators.iloc[-1]
-            
-            # Create columns for different indicator groups
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.markdown("**Momentum Indicators**")
-                # RSI
-                rsi_value = latest['RSI']
-                rsi_status = "🟢" if rsi_value < 30 else "🔴" if rsi_value > 70 else "⚪"
-                st.metric("RSI", f"{rsi_value:.1f}", delta=f"{rsi_status} {'Oversold' if rsi_value < 30 else 'Overbought' if rsi_value > 70 else 'Neutral'}")
+                else:
+                    # Get AI suggestions
+                    ai_suggestions = AIService.generate_trading_suggestions(technical_data)
                 
-                # MACD
-                macd_value = latest['MACD']
-                macd_signal = latest['MACD_Signal']
-                macd_status = "🟢" if macd_value > macd_signal else "🔴"
-                st.metric("MACD", f"{macd_value:.2f}", delta=f"{macd_status} {'Bullish' if macd_value > macd_signal else 'Bearish'}")
+                # Display the AI suggestions
+                st.markdown(ai_suggestions)
                 
-                # MACD Signal
-                st.metric("MACD Signal", f"{macd_signal:.2f}")
+                # Advanced Key Indicators
+                st.markdown("---")
+                st.subheader("📈 Advanced Key Indicators")
                 
-                # Stochastic
-                stoch_k = latest['Stoch_K']
-                stoch_d = latest['Stoch_D']
-                stoch_status = "🟢" if stoch_k > stoch_d else "🔴"
-                st.metric("Stochastic K", f"{stoch_k:.1f}", delta=f"{stoch_status} {'Bullish' if stoch_k > stoch_d else 'Bearish'}")
-                st.metric("Stochastic D", f"{stoch_d:.1f}")
-            
-            with col2:
-                st.markdown("**Trend & Volume**")
-                # ADX
-                adx_value = latest['ADX']
-                adx_status = "🟢" if adx_value > 25 else "⚪"
-                st.metric("ADX", f"{adx_value:.1f}", delta=f"{adx_status} {'Strong Trend' if adx_value > 25 else 'Weak Trend'}")
+                # Get the most recent data point
+                latest = df_with_indicators.iloc[-1]
                 
-                # Volume Ratio
-                volume_ratio = latest['Volume'] / latest['Volume_SMA'] if 'Volume_SMA' in latest else 1.0
-                volume_status = "🟢" if volume_ratio > 1.2 else "🔴" if volume_ratio < 0.8 else "⚪"
-                st.metric("Volume Ratio", f"{volume_ratio:.1f}", delta=f"{volume_status} {'High' if volume_ratio > 1.2 else 'Low' if volume_ratio < 0.8 else 'Normal'}")
+                # Create columns for different indicator groups
+                col1, col2 = st.columns(2)
                 
-                # BB Position
-                bb_position = latest['BB_Position']
-                bb_status = "🟢" if bb_position < 0.2 else "🔴" if bb_position > 0.8 else "⚪"
-                st.metric("BB Position", f"{bb_position:.2f}", delta=f"{bb_status} {'Oversold' if bb_position < 0.2 else 'Overbought' if bb_position > 0.8 else 'Neutral'}")
+                with col1:
+                    st.markdown("**Momentum Indicators**")
+                    # RSI
+                    rsi_value = latest['RSI']
+                    rsi_status = "🟢" if rsi_value < 30 else "🔴" if rsi_value > 70 else "⚪"
+                    st.metric("RSI", f"{rsi_value:.1f}", delta=f"{rsi_status} {'Oversold' if rsi_value < 30 else 'Overbought' if rsi_value > 70 else 'Neutral'}")
+                    
+                    # MACD
+                    macd_value = latest['MACD']
+                    macd_signal = latest['MACD_Signal']
+                    macd_status = "🟢" if macd_value > macd_signal else "🔴"
+                    st.metric("MACD", f"{macd_value:.2f}", delta=f"{macd_status} {'Bullish' if macd_value > macd_signal else 'Bearish'}")
+                    
+                    # MACD Signal
+                    st.metric("MACD Signal", f"{macd_signal:.2f}")
+                    
+                    # Stochastic
+                    stoch_k = latest['Stoch_K']
+                    stoch_d = latest['Stoch_D']
+                    stoch_status = "🟢" if stoch_k > stoch_d else "🔴"
+                    st.metric("Stochastic K", f"{stoch_k:.1f}", delta=f"{stoch_status} {'Bullish' if stoch_k > stoch_d else 'Bearish'}")
+                    st.metric("Stochastic D", f"{stoch_d:.1f}")
                 
-                # ATR
-                st.metric("ATR", f"{latest['ATR']:.2f}")
-            
-            # Moving Averages
-            st.markdown("**Moving Averages**")
-            col1, col2, col3 = st.columns(3)
-            
-            # Calculate MA relationships
-            sma20 = latest['SMA_20']
-            sma50 = latest['SMA_50']
-            sma200 = latest['SMA_200']
-            current_price = latest['Close']
-            
-            with col1:
-                ma20_status = "🟢" if current_price > sma20 else "🔴"
-                st.metric("SMA 20", f"{sma20:.2f}", delta=f"{ma20_status} {'Above' if current_price > sma20 else 'Below'}")
-            
-            with col2:
-                ma50_status = "🟢" if current_price > sma50 else "🔴"
-                st.metric("SMA 50", f"{sma50:.2f}", delta=f"{ma50_status} {'Above' if current_price > sma50 else 'Below'}")
-            
-            with col3:
-                ma200_status = "🟢" if current_price > sma200 else "🔴"
-                st.metric("SMA 200", f"{sma200:.2f}", delta=f"{ma200_status} {'Above' if current_price > sma200 else 'Below'}")
-            
-            # Add MA Crossovers
-            st.markdown("**Moving Average Crossovers**")
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                # Golden Cross (SMA50 crosses above SMA200)
-                golden_cross = sma50 > sma200 and df_with_indicators['SMA_50'].iloc[-2] <= df_with_indicators['SMA_200'].iloc[-2]
-                if golden_cross:
-                    st.success("🟢 Golden Cross (SMA50 > SMA200)")
+                with col2:
+                    st.markdown("**Trend & Volume**")
+                    # ADX
+                    adx_value = latest['ADX']
+                    adx_status = "🟢" if adx_value > 25 else "⚪"
+                    st.metric("ADX", f"{adx_value:.1f}", delta=f"{adx_status} {'Strong Trend' if adx_value > 25 else 'Weak Trend'}")
+                    
+                    # Volume Ratio
+                    volume_ratio = latest['Volume'] / latest['Volume_SMA'] if 'Volume_SMA' in latest else 1.0
+                    volume_status = "🟢" if volume_ratio > 1.2 else "🔴" if volume_ratio < 0.8 else "⚪"
+                    st.metric("Volume Ratio", f"{volume_ratio:.1f}", delta=f"{volume_status} {'High' if volume_ratio > 1.2 else 'Low' if volume_ratio < 0.8 else 'Normal'}")
+                    
+                    # BB Position
+                    bb_position = latest['BB_Position']
+                    bb_status = "🟢" if bb_position < 0.2 else "🔴" if bb_position > 0.8 else "⚪"
+                    st.metric("BB Position", f"{bb_position:.2f}", delta=f"{bb_status} {'Oversold' if bb_position < 0.2 else 'Overbought' if bb_position > 0.8 else 'Neutral'}")
+                    
+                    # ATR
+                    st.metric("ATR", f"{latest['ATR']:.2f}")
                 
-                # Death Cross (SMA50 crosses below SMA200)
-                death_cross = sma50 < sma200 and df_with_indicators['SMA_50'].iloc[-2] >= df_with_indicators['SMA_200'].iloc[-2]
-                if death_cross:
-                    st.error("🔴 Death Cross (SMA50 < SMA200)")
-            
-            with col2:
-                # Short-term Cross (SMA20 crosses SMA50)
-                short_term_bullish = sma20 > sma50 and df_with_indicators['SMA_20'].iloc[-2] <= df_with_indicators['SMA_50'].iloc[-2]
-                short_term_bearish = sma20 < sma50 and df_with_indicators['SMA_20'].iloc[-2] >= df_with_indicators['SMA_50'].iloc[-2]
+                # Moving Averages
+                st.markdown("**Moving Averages**")
+                col1, col2, col3 = st.columns(3)
                 
-                if short_term_bullish:
-                    st.success("🟢 Short-term Bullish (SMA20 > SMA50)")
-                elif short_term_bearish:
-                    st.error("🔴 Short-term Bearish (SMA20 < SMA50)")
-            
-            # Enhanced risk warning based on research
-            st.markdown("---")
-            st.warning("""
-            ⚠️ **Risk Management Guidelines**:
-            - Maximum portfolio risk per trade: 5% (as per research)
-            - Position sizing: 1-2% of portfolio per trade with 5% stop-loss
-            - For swing trades: Use tighter stops (2-5% as per research)
-            - For breakout trades: Use wider stops (10-15% as per research)
-            - Diversification: Spread risk across multiple uncorrelated positions
-            - Volatility-based sizing: Adjust position size based on ATR
-            - Portfolio-level risk: Pause trading if overall drawdown approaches 5%
-            - Always consider market conditions and sector strength
-            - Monitor for momentum fade or reversal patterns
-            """)
-            
+                # Calculate MA relationships
+                sma20 = latest['SMA_20']
+                sma50 = latest['SMA_50']
+                sma200 = latest['SMA_200']
+                current_price = latest['Close']
+                
+                with col1:
+                    ma20_status = "🟢" if current_price > sma20 else "🔴"
+                    st.metric("SMA 20", f"{sma20:.2f}", delta=f"{ma20_status} {'Above' if current_price > sma20 else 'Below'}")
+                
+                with col2:
+                    ma50_status = "🟢" if current_price > sma50 else "🔴"
+                    st.metric("SMA 50", f"{sma50:.2f}", delta=f"{ma50_status} {'Above' if current_price > sma50 else 'Below'}")
+                
+                with col3:
+                    ma200_status = "🟢" if current_price > sma200 else "🔴"
+                    st.metric("SMA 200", f"{sma200:.2f}", delta=f"{ma200_status} {'Above' if current_price > sma200 else 'Below'}")
+                
+                # Add MA Crossovers
+                st.markdown("**Moving Average Crossovers**")
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    # Golden Cross (SMA50 crosses above SMA200)
+                    golden_cross = sma50 > sma200 and df_with_indicators['SMA_50'].iloc[-2] <= df_with_indicators['SMA_200'].iloc[-2]
+                    if golden_cross:
+                        st.success("🟢 Golden Cross (SMA50 > SMA200)")
+                    
+                    # Death Cross (SMA50 crosses below SMA200)
+                    death_cross = sma50 < sma200 and df_with_indicators['SMA_50'].iloc[-2] >= df_with_indicators['SMA_200'].iloc[-2]
+                    if death_cross:
+                        st.error("🔴 Death Cross (SMA50 < SMA200)")
+                
+                with col2:
+                    # Short-term Cross (SMA20 crosses SMA50)
+                    short_term_bullish = sma20 > sma50 and df_with_indicators['SMA_20'].iloc[-2] <= df_with_indicators['SMA_50'].iloc[-2]
+                    short_term_bearish = sma20 < sma50 and df_with_indicators['SMA_20'].iloc[-2] >= df_with_indicators['SMA_50'].iloc[-2]
+                    
+                    if short_term_bullish:
+                        st.success("🟢 Short-term Bullish (SMA20 > SMA50)")
+                    elif short_term_bearish:
+                        st.error("🔴 Short-term Bearish (SMA20 < SMA50)")
+                
+                # Enhanced risk warning based on research
+                st.markdown("---")
+                st.warning("""
+                ⚠️ **Risk Management Guidelines**:
+                - Maximum portfolio risk per trade: 5% (as per research)
+                - Position sizing: 1-2% of portfolio per trade with 5% stop-loss
+                - For swing trades: Use tighter stops (2-5% as per research)
+                - For breakout trades: Use wider stops (10-15% as per research)
+                - Diversification: Spread risk across multiple uncorrelated positions
+                - Volatility-based sizing: Adjust position size based on ATR
+                - Portfolio-level risk: Pause trading if overall drawdown approaches 5%
+                - Always consider market conditions and sector strength
+                - Monitor for momentum fade or reversal patterns
+                """)
+                
+            except Exception as e:
+                st.error(f"Error analyzing signals: {str(e)}")
+                st.info("This may be due to insufficient data or missing indicators. Try a longer time period.")
+        
         except Exception as e:
-            st.error(f"Error analyzing signals: {str(e)}")
-            st.info("This may be due to insufficient data or missing indicators. Try a longer time period.")
+            st.error(f"Error fetching or processing data: {str(e)}")
+            st.info("This may be due to API limitations or invalid symbol. Please try again.")
 
 def stock_screener_tab():
     """Stock screening for trading opportunities"""

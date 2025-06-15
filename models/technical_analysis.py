@@ -6,6 +6,7 @@ Implements the key technical indicators mentioned in the research study:
 - Trend Indicators: MACD, Moving Averages, ADX
 - Volatility Bands: Bollinger Bands, Keltner Channels  
 - Volume/Accumulation: OBV, A/D Line, Chaikin Money Flow
+- Options Pinning: Strike Price Magnets, OI Analysis
 """
 
 import pandas as pd
@@ -604,6 +605,54 @@ class TechnicalAnalyzer:
                         result['High'], result['Low'], result['Close'], 
                         result['Volume'], result['ATR']
                     )
+            
+            # ---- OPTIONS PINNING ANALYSIS ----
+            if len(result) > 0:
+                # Get current price for generating sample option strikes
+                current_price = result['Close'].iloc[-1]
+                
+                # Create sample strikes (in a real app, would come from actual options data)
+                # Generate strikes $5 apart for stocks under $100, $10 apart for stocks over $100
+                strike_interval = 5 if current_price < 100 else 10
+                round_to_nearest = lambda x, base=strike_interval: base * round(x/base)
+                current_price_rounded = round_to_nearest(current_price)
+                sample_strikes = [current_price_rounded + (i * strike_interval) for i in range(-5, 6)]
+                
+                # Generate sample open interest (higher for strikes closer to current price)
+                # In a real app, this would be actual OI data from an options API
+                sample_oi = {strike: max(1000, int(5000 * (1 - (abs(strike - current_price) / (current_price * 0.1))))) 
+                              for strike in sample_strikes}
+                
+                # Run options pinning analysis
+                pinning_analysis = self.analyze_options_pinning(
+                    result['Close'],
+                    option_strikes=sample_strikes,
+                    option_oi=sample_oi
+                )
+                
+                # Add pinning data to result
+                result['Nearest_Strike'] = pinning_analysis['nearest_strike']
+                result['Strike_Distance'] = pinning_analysis['distance_to_strike']
+                
+                # Store highest OI strike as potential magnet
+                if pinning_analysis['potential_magnets']:
+                    magnet_strike, magnet_oi = pinning_analysis['potential_magnets'][0]
+                    result['Magnet_Strike'] = magnet_strike
+                    result['Magnet_OI'] = magnet_oi
+                
+                # Add pinning pressure
+                result['Pinning_Pressure'] = pinning_analysis['pinning_pressure']
+                
+                # Check for pinning pattern
+                if pinning_analysis['nearest_strike']:
+                    has_pinning_pattern = self.detect_pinning_pattern(
+                        result['Close'], 
+                        pinning_analysis['nearest_strike']
+                    )
+                    # Add to results as 0/1 indicator
+                    result['Pinning_Pattern'] = 1 if has_pinning_pattern else 0
+                else:
+                    result['Pinning_Pattern'] = 0
             
         except Exception as e:
             print(f"Error calculating indicators: {e}")
@@ -1424,4 +1473,104 @@ class TechnicalAnalyzer:
             if (spike_beyond_prior_high or spike_beyond_prior_low) and intraday_reversal and volume_spike and next_day_reversal:
                 stop_hunting.iloc[i] = 1
                 
-        return stop_hunting 
+        return stop_hunting
+    
+    # ==================== OPTIONS PINNING ANALYSIS ====================
+    
+    def analyze_options_pinning(self, 
+                               close: pd.Series, 
+                               high: pd.Series = None, 
+                               low: pd.Series = None,
+                               volume: pd.Series = None, 
+                               option_strikes: List[float] = None,
+                               option_oi: Dict[float, int] = None) -> Dict[str, any]:
+        """
+        Analyze options pinning effects and potential strike price magnets
+        
+        Parameters:
+        - close: Price series
+        - high/low: Optional high/low series
+        - volume: Optional volume series
+        - option_strikes: List of available option strike prices
+        - option_oi: Dictionary mapping strikes to open interest values
+        
+        Returns:
+        - Dictionary with pinning analysis results
+        """
+        result = {
+            'nearest_strike': None,
+            'distance_to_strike': 0.0,
+            'potential_magnets': [],
+            'pinning_pressure': 0.0,
+            'expiration_proximity': False
+        }
+        
+        # Skip if no strike data provided
+        if not option_strikes or len(option_strikes) == 0:
+            return result
+        
+        current_price = close.iloc[-1]
+        
+        # Find nearest strike
+        nearest_strike = min(option_strikes, key=lambda x: abs(x - current_price))
+        result['nearest_strike'] = nearest_strike
+        result['distance_to_strike'] = abs(current_price - nearest_strike)
+        
+        # If OI data is available, identify potential magnet strikes
+        if option_oi and len(option_oi) > 0:
+            # Filter to strikes within 5% of current price
+            nearby_strikes = {k: v for k, v in option_oi.items() 
+                              if abs(k - current_price) / current_price < 0.05}
+            
+            # Sort by OI and convert to list of (strike, oi) tuples
+            sorted_strikes = sorted(nearby_strikes.items(), key=lambda x: x[1], reverse=True)
+            
+            # Take top 3 strikes with highest OI as potential magnets
+            result['potential_magnets'] = sorted_strikes[:3] if len(sorted_strikes) >= 3 else sorted_strikes
+            
+            # Calculate pinning pressure based on OI concentration
+            if sorted_strikes:
+                total_nearby_oi = sum(oi for _, oi in sorted_strikes)
+                highest_oi = sorted_strikes[0][1] if sorted_strikes else 0
+                
+                # Pinning pressure is ratio of highest OI to average OI
+                avg_oi = total_nearby_oi / len(sorted_strikes) if sorted_strikes else 0
+                result['pinning_pressure'] = highest_oi / avg_oi if avg_oi > 0 else 0
+        
+        return result
+    
+    def detect_pinning_pattern(self, 
+                              close: pd.Series, 
+                              nearest_strike: float,
+                              lookback: int = 3) -> bool:
+        """
+        Detect if price is showing a pinning pattern (oscillating around strike with decreasing amplitude)
+        
+        Parameters:
+        - close: Price series
+        - nearest_strike: Nearest option strike price
+        - lookback: Number of days to look back for pattern
+        
+        Returns:
+        - Boolean indicating if pinning pattern detected
+        """
+        if len(close) < lookback + 1:
+            return False
+            
+        # Get price differences from nearest strike
+        diffs = close[-lookback:] - nearest_strike
+        
+        # Check if price is oscillating around the strike (sign changes)
+        sign_changes = sum(1 for i in range(1, len(diffs)) if diffs[i] * diffs[i-1] < 0)
+        
+        # Calculate amplitude of oscillations
+        amplitudes = [abs(diff) for diff in diffs]
+        
+        # Check if pattern shows decreasing amplitude (at least 2 decreasing steps)
+        decreasing_amplitude = sum(1 for i in range(1, len(amplitudes)) 
+                                  if amplitudes[i] < amplitudes[i-1])
+        
+        # Pinning pattern detected if:
+        # 1. At least one sign change (price crosses the strike)
+        # 2. Amplitude is decreasing (price getting closer to strike)
+        return sign_changes > 0 and decreasing_amplitude >= 1 
