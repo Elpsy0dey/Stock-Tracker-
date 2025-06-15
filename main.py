@@ -30,7 +30,7 @@ from services.strategy_manager import StrategyManager
 from services.ai_service import AIService
 from config.api_config import API_CONFIG
 from services.options_service import get_options_chain
-from utils.data_utils import load_trades_from_file, get_stock_data, get_sp500_tickers
+from utils.data_utils import load_trades_from_file, get_stock_data, get_sp500_tickers, load_data_from_google_sheet
 from utils.chart_utils import (
     create_monthly_balance_chart, create_portfolio_allocation_chart,
     create_technical_analysis_chart, create_explanatory_chart,
@@ -126,22 +126,82 @@ def main():
         )
         st.session_state.portfolio_tracker.starting_cash = starting_cash
         
-        uploaded_file = st.file_uploader(
-            "Upload Trading Data",
-            type=ALLOWED_FILE_TYPES,
-            help="Upload your trading history (CSV or Excel)"
+        # Data source selection
+        data_source = st.radio(
+            "Data Source",
+            options=["File Upload", "Google Sheets"],
+            horizontal=True
         )
         
-        if uploaded_file is not None:
-            if st.button("📤 Load Trading Data"):
-                success, trades_df, error_msg = load_trades_from_file(uploaded_file)
-                if success:
-                    st.session_state.portfolio_tracker.load_trades(trades_df)
-                    st.session_state.data_loaded = True
-                    st.success("✅ Trading data loaded successfully!")
-                    st.rerun()
-                else:
-                    st.error(f"❌ {error_msg}")
+        if data_source == "File Upload":
+            uploaded_file = st.file_uploader(
+                "Upload Trading Data",
+                type=ALLOWED_FILE_TYPES,
+                help="Upload your trading history (CSV or Excel)"
+            )
+            
+            if uploaded_file is not None:
+                if st.button("📤 Load Trading Data"):
+                    success, trades_df, error_msg = load_trades_from_file(uploaded_file)
+                    if success:
+                        st.session_state.portfolio_tracker.load_trades(trades_df)
+                        st.session_state.data_loaded = True
+                        st.success("✅ Trading data loaded successfully!")
+                        st.rerun()
+                    else:
+                        st.error(f"❌ {error_msg}")
+        
+        else:  # Google Sheets
+            sheet_url = st.text_input(
+                "Google Sheet URL",
+                help="Enter the URL of a publicly accessible Google Sheet"
+            )
+            
+            sheet_tab = st.text_input(
+                "Sheet Tab (Optional)",
+                help="Enter the name of the specific sheet tab to load (leave empty for first tab)"
+            )
+            
+            if sheet_url:
+                if st.button("📊 Load from Google Sheets"):
+                    success, trades_df, error_msg = load_data_from_google_sheet(sheet_url, sheet_tab if sheet_tab else None)
+                    if success:
+                        st.session_state.portfolio_tracker.load_trades(trades_df)
+                        st.session_state.data_loaded = True
+                        st.success("✅ Trading data loaded successfully from Google Sheets!")
+                        st.rerun()
+                    else:
+                        st.error(f"❌ {error_msg}")
+            
+            st.info("📝 Make sure your Google Sheet is publicly accessible or shared with anyone with the link")
+            
+            with st.expander("📋 Expected Google Sheet Format"):
+                st.markdown("""
+                Your Google Sheet should have the following columns:
+                - **Trade Date**: Date of the trade
+                - **Symbol**: Stock symbol/ticker
+                - **Side**: Buy or Sell
+                - **Units**: Number of shares
+                - **Avg. Price**: Price per share
+                
+                Optional columns:
+                - Settlement Date
+                - Trade Identifier
+                - Value
+                - Fees
+                - Total Value
+                - Currency
+                """)
+                
+                st.markdown("**Example Sheet Format:**")
+                example_df = pd.DataFrame({
+                    'Trade Date': ['2023-01-15', '2023-02-01'],
+                    'Symbol': ['AAPL', 'MSFT'],
+                    'Side': ['Buy', 'Sell'],
+                    'Units': [10, 5],
+                    'Avg. Price': [150.25, 280.75]
+                })
+                st.dataframe(example_df)
         
         # Market data controls
         if st.session_state.data_loaded:

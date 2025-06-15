@@ -9,6 +9,8 @@ import streamlit as st
 from datetime import datetime, timedelta
 from typing import Dict, List, Tuple, Optional
 import requests
+import re
+import io
 from config.settings import *
 
 def load_trades_from_file(uploaded_file) -> Tuple[bool, pd.DataFrame, str]:
@@ -391,4 +393,100 @@ def get_sp500_tickers() -> List[str]:
             'UNH', 'JNJ', 'JPM', 'V', 'PG', 'HD', 'MA', 'PFE', 'BAC', 'ABBV',
             'KO', 'AVGO', 'PEP', 'TMO', 'COST', 'WMT', 'DIS', 'ABT', 'VZ',
             'ADBE', 'NFLX', 'CRM', 'XOM', 'NKE', 'DHR', 'LIN', 'BMY', 'ORCL'
-        ] 
+        ]
+
+def load_data_from_google_sheet(sheet_url: str, sheet_tab: str = None) -> Tuple[bool, pd.DataFrame, str]:
+    """
+    Load data from a Google Sheet URL
+    
+    Args:
+        sheet_url: URL of the Google Sheet (must be publicly accessible or shared with anyone with the link)
+        sheet_tab: Optional name of the specific sheet tab to load
+        
+    Returns:
+        Tuple of (success, dataframe, error_message)
+    """
+    try:
+        # Extract the sheet ID from the URL
+        sheet_id_match = re.search(r'/spreadsheets/d/([a-zA-Z0-9-_]+)', sheet_url)
+        if not sheet_id_match:
+            return False, pd.DataFrame(), "Invalid Google Sheets URL format"
+        
+        sheet_id = sheet_id_match.group(1)
+        
+        # Create the export URL (CSV format)
+        export_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv"
+        
+        # Add sheet tab parameter if specified
+        if sheet_tab:
+            export_url += f"&gid={sheet_tab}"
+        
+        # Make a request to check if the sheet is accessible
+        response = requests.get(export_url)
+        if response.status_code != 200:
+            if response.status_code == 404:
+                return False, pd.DataFrame(), "Google Sheet not found. Make sure the URL is correct."
+            elif response.status_code == 403:
+                return False, pd.DataFrame(), "Access denied. Make sure the Google Sheet is publicly accessible or shared with anyone with the link."
+            else:
+                return False, pd.DataFrame(), f"Error accessing Google Sheet (HTTP {response.status_code})"
+        
+        # Read the CSV data from the response content
+        df = pd.read_csv(io.StringIO(response.content.decode('utf-8')))
+        
+        if df.empty:
+            return False, pd.DataFrame(), "The Google Sheet appears to be empty"
+        
+        # Standardize column names
+        column_mapping = {
+            'Trade Date': 'trade_date',
+            'Settlement Date': 'settlement_date',
+            'Symbol': 'symbol',
+            'Side': 'side',
+            'Trade Identifier': 'trade_id',
+            'Units': 'units',
+            'Avg. Price': 'avg_price',
+            'Value': 'value',
+            'Fees': 'fees',
+            'GST': 'gst',
+            'Total Value': 'total_value',
+            'Currency': 'currency',
+            'AUD/USD rate': 'aud_usd_rate'
+        }
+        
+        # Rename columns if they exist
+        for old_name, new_name in column_mapping.items():
+            if old_name in df.columns:
+                df = df.rename(columns={old_name: new_name})
+        
+        # Check for required columns
+        required_columns = ['trade_date', 'symbol', 'side', 'units', 'avg_price']
+        missing_columns = [col for col in required_columns if col not in df.columns]
+        
+        if missing_columns:
+            error_msg = f"Missing required columns: {', '.join(missing_columns)}"
+            return False, pd.DataFrame(), error_msg
+        
+        # Convert dates
+        df['trade_date'] = pd.to_datetime(df['trade_date'])
+        if 'settlement_date' in df.columns:
+            df['settlement_date'] = pd.to_datetime(df['settlement_date'])
+        
+        # Clean symbol names (extract ticker from full name)
+        df['ticker'] = df['symbol'].str.split(' - ').str[0]
+        
+        # Handle numeric columns
+        numeric_columns = ['units', 'avg_price', 'value', 'fees', 'total_value']
+        for col in numeric_columns:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col].astype(str).str.replace('$', '').str.replace(',', ''), errors='coerce')
+        
+        # Fill NaN values
+        df['fees'] = df['fees'].fillna(0)
+        if 'gst' in df.columns:
+            df['gst'] = df['gst'].fillna(0)
+        
+        return True, df, ""
+        
+    except Exception as e:
+        return False, pd.DataFrame(), f"Error loading Google Sheet: {str(e)}" 
