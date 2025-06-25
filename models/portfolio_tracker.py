@@ -20,6 +20,8 @@ class PortfolioTracker:
         self.total_fees = 0.0
         self.current_prices = {}
         self.trade_history = []  # List to store trade history
+        self.deposits = []  # List to store deposits
+        self.total_deposits = 0.0  # Track total deposits
         
     def load_trades(self, trades_df: pd.DataFrame) -> bool:
         """Load trades DataFrame and calculate portfolio"""
@@ -29,6 +31,34 @@ class PortfolioTracker:
             return True
         except Exception as e:
             print(f"Error loading trades: {str(e)}")
+            return False
+    
+    def add_deposit(self, amount: float, date: datetime = None) -> bool:
+        """Add a deposit to the account
+        
+        Args:
+            amount: Deposit amount
+            date: Date of deposit (defaults to current date)
+            
+        Returns:
+            bool: Success status
+        """
+        try:
+            if amount <= 0:
+                return False
+                
+            if date is None:
+                date = datetime.now()
+                
+            self.deposits.append({
+                'amount': amount,
+                'date': date
+            })
+            
+            self.total_deposits += amount
+            return True
+        except Exception as e:
+            print(f"Error adding deposit: {str(e)}")
             return False
     
     def _calculate_portfolio_and_pnl(self):
@@ -164,8 +194,8 @@ class PortfolioTracker:
         sell_trades = self.trades_df[self.trades_df['side'].str.upper() == 'SELL']
         total_sales = sell_trades['total_value'].sum() if 'total_value' in sell_trades.columns else (sell_trades['units'] * sell_trades['avg_price'] - sell_trades['fees']).sum()
         
-        # Cash balance = starting cash - purchases + sales
-        cash_balance = self.starting_cash - total_purchases + abs(total_sales)
+        # Cash balance = starting cash + deposits - purchases + sales
+        cash_balance = self.starting_cash + self.total_deposits - total_purchases + abs(total_sales)
         return cash_balance
     
     def get_summary_stats(self) -> Dict:
@@ -184,18 +214,20 @@ class PortfolioTracker:
         
         return {
             'starting_cash': self.starting_cash,
+            'total_deposits': self.total_deposits,
             'current_cash': cash_balance,
             'portfolio_value': portfolio_value,
             'total_account_value': total_account_value,
             'realized_pnl': self.realized_pnl,
             'unrealized_pnl': total_unrealized_pnl,
             'total_pnl': self.realized_pnl + total_unrealized_pnl,
-            'total_return_pct': ((total_account_value - self.starting_cash) / self.starting_cash) * 100,
+            'total_return_pct': ((total_account_value - self.starting_cash - self.total_deposits) / (self.starting_cash + self.total_deposits)) * 100,
             'total_fees': self.total_fees,
             'total_trades': total_trades,
             'buy_trades': buy_trades,
             'sell_trades': sell_trades,
-            'portfolio_details': portfolio_details
+            'portfolio_details': portfolio_details,
+            'deposits': self.deposits
         }
     
     def calculate_monthly_balance_changes(self) -> pd.DataFrame:

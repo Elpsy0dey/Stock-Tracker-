@@ -126,6 +126,38 @@ def main():
         )
         st.session_state.portfolio_tracker.starting_cash = starting_cash
         
+        # Deposits management
+        with st.expander("💰 Manage Deposits"):
+            # Display current deposits
+            if st.session_state.portfolio_tracker.deposits:
+                st.write("Current Deposits:")
+                deposits_df = pd.DataFrame(st.session_state.portfolio_tracker.deposits)
+                deposits_df['date'] = deposits_df['date'].dt.strftime('%Y-%m-%d')
+                st.dataframe(deposits_df, use_container_width=True, hide_index=True)
+                st.write(f"Total Deposits: ${st.session_state.portfolio_tracker.total_deposits:,.2f}")
+            
+            # Add new deposit
+            st.write("Add New Deposit:")
+            deposit_col1, deposit_col2 = st.columns(2)
+            with deposit_col1:
+                deposit_amount = st.number_input("Amount ($)", min_value=0.01, step=100.0, format="%.2f")
+            with deposit_col2:
+                deposit_date = st.date_input("Date", datetime.now())
+            
+            if st.button("➕ Add Deposit"):
+                if deposit_amount > 0:
+                    success = st.session_state.portfolio_tracker.add_deposit(
+                        deposit_amount, 
+                        datetime.combine(deposit_date, datetime.min.time())
+                    )
+                    if success:
+                        st.success(f"✅ Deposit of ${deposit_amount:,.2f} added successfully!")
+                        st.rerun()
+                    else:
+                        st.error("❌ Failed to add deposit")
+                else:
+                    st.warning("⚠️ Please enter a valid deposit amount")
+        
         # Data source selection
         data_source = st.radio(
             "Data Source",
@@ -265,6 +297,7 @@ def portfolio_tab():
             delta_color="normal"
         )
         st.metric("Cash Balance", f"${stats['current_cash']:,.2f}")
+        st.metric("Starting Cash", f"${stats['starting_cash']:,.2f}")
     
     with col2:
         st.metric(
@@ -274,6 +307,7 @@ def portfolio_tab():
             delta_color="normal"
         )
         st.metric("Return %", f"{stats['total_return_pct']:,.2f}%")
+        st.metric("Total Deposits", f"${stats['total_deposits']:,.2f}")
     
     with col3:
         st.metric("Portfolio Value", f"${stats['portfolio_value']:,.2f}")
@@ -285,6 +319,30 @@ def portfolio_tab():
         )
     
     st.markdown("---")
+    
+    # Deposits section
+    if stats['deposits']:
+        st.markdown("<h2 style='font-size: 2rem; margin-bottom: 1rem;'>💰 Deposits</h2>", unsafe_allow_html=True)
+        
+        # Create DataFrame for deposits
+        deposits_df = pd.DataFrame(stats['deposits'])
+        deposits_df['date'] = pd.to_datetime(deposits_df['date']).dt.strftime('%Y-%m-%d')
+        deposits_df.columns = ['Amount ($)', 'Date']
+        
+        # Add total row
+        total_row = pd.DataFrame({
+            'Amount ($)': [stats['total_deposits']],
+            'Date': ['TOTAL']
+        })
+        deposits_df = pd.concat([deposits_df, total_row])
+        
+        # Format amount column
+        deposits_df['Amount ($)'] = deposits_df['Amount ($)'].apply(lambda x: f"${x:,.2f}")
+        
+        # Display deposits table
+        st.dataframe(deposits_df, use_container_width=True, hide_index=True)
+        
+        st.markdown("---")
     
     # Monthly Balance Changes
     st.markdown("<h2 style='font-size: 2rem; margin-bottom: 1rem;'>📅 Monthly Balance Changes</h2>", unsafe_allow_html=True)
