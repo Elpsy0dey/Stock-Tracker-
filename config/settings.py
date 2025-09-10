@@ -5,7 +5,7 @@ Configuration settings for the Trading Portfolio Tracker
 # Application Settings
 APP_TITLE = "📈 Advanced Trading Portfolio Tracker"
 APP_ICON = "📈"
-DEFAULT_STARTING_CASH = 62506.81
+DEFAULT_STARTING_CASH = 69013.50
 
 # Risk Management Settings
 MAX_PORTFOLIO_RISK = 0.05  # 5% maximum portfolio risk
